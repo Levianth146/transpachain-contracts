@@ -1,0 +1,11 @@
+{
+  "name": "transpachain-contracts",
+  "version": "1.0.0",
+  "private": true,
+  "devDependencies": {
+    "hardhat": "^2.22.0",
+    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
+    "@nomicfoundation/hardhat-ethers": "^3.0.0",
+    "dotenv": "^16.0.0"
+  }
+}
