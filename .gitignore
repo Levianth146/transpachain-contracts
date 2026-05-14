@@ -1,0 +1,9 @@
+out/
+cache/
+artifacts/
+cache_hardhat/
+node_modules/
+typechain-types/
+.env
+package-lock.json
+tsconfig.json
