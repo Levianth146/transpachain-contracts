@@ -12,24 +12,36 @@ interface IGovernanceDAO {
     // Enums & Structs
     // ─────────────────────────────────────────────
 
-    enum ProposalState { Pending, Active, Defeated, Queued, Executed, Cancelled }
+    enum ProposalState {
+        Pending,
+        Active,
+        Defeated,
+        Queued,
+        Executed,
+        Cancelled
+    }
 
-    enum VoteChoice { Against, For, Abstain }
+    enum VoteChoice {
+        Against,
+        For,
+        Abstain
+    }
 
     struct Proposal {
         uint256 id;
         uint256 campaignId;
-        uint8   milestoneIndex;
-        string  proofCID;
+        uint8 milestoneIndex;
+        string proofCID;
         address proposer;
         uint256 startBlock;
         uint256 endBlock;
-        uint256 forVotes;       // wei-denominated voting power
+        uint256 forVotes; // wei-denominated voting power
         uint256 againstVotes;
         uint256 abstainVotes;
         uint256 totalVotingPower;
         ProposalState state;
-        uint256 executeAfter;  // timelock: unix timestamp
+        uint256 executeAfter; // timelock: unix timestamp
+        uint256 snapshotBlock; // blocks are created when proposals are generated — used for voting power snapshots.
     }
 
     // ─────────────────────────────────────────────
@@ -39,8 +51,8 @@ interface IGovernanceDAO {
     event ProposalCreated(
         uint256 indexed proposalId,
         uint256 indexed campaignId,
-        uint8   milestoneIndex,
-        string  proofCID,
+        uint8 milestoneIndex,
+        string proofCID,
         uint256 endBlock
     );
     event VoteCast(
@@ -52,6 +64,10 @@ interface IGovernanceDAO {
     event ProposalQueued(uint256 indexed proposalId, uint256 executeAfter);
     event ProposalExecuted(uint256 indexed proposalId);
     event ProposalDefeated(uint256 indexed proposalId);
+    event ProposalResubmitted(
+        uint256 indexed newProposalId,
+        uint256 indexed oldProposalId
+    );
 
     // ─────────────────────────────────────────────
     // Write Functions
@@ -60,7 +76,7 @@ interface IGovernanceDAO {
     /// @notice Create proposal — called by DonationVault on milestoneProofSubmit
     function createProposal(
         uint256 campaignId,
-        uint8   milestoneIndex,
+        uint8 milestoneIndex,
         string calldata proofCID
     ) external returns (uint256 proposalId);
 
@@ -81,8 +97,33 @@ interface IGovernanceDAO {
     // View Functions
     // ─────────────────────────────────────────────
 
-    function getProposal(uint256 proposalId) external view returns (Proposal memory);
-    function getProposalState(uint256 proposalId) external view returns (ProposalState);
-    function hasVoted(uint256 proposalId, address voter) external view returns (bool);
-    function getVotingPower(uint256 campaignId, address voter) external view returns (uint256);
+    function getProposal(
+        uint256 proposalId
+    ) external view returns (Proposal memory);
+
+    function getProposalState(
+        uint256 proposalId
+    ) external view returns (ProposalState);
+
+    function hasVoted(
+        uint256 proposalId,
+        address voter
+    ) external view returns (bool);
+
+    function getVotingPower(
+        uint256 campaignId,
+        address voter
+    ) external view returns (uint256);
+
+    function getCampaignProposals(
+        uint256 campaignId
+    ) external view returns (uint256[] memory);
+
+    function getActiveProposal(
+        uint256 campaignId
+    ) external view returns (uint256 proposalId);
+
+    function resubmitProposal(
+        uint256 oldProposalId
+    ) external returns (uint256 newProposalId);
 }
