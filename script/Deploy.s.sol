@@ -28,7 +28,8 @@ contract Deploy is Script {
         console.log("GovernanceDAO:", address(dao));
 
         // 4. Deploy DonationVault (needs all three above)
-        DonationVault vault = new DonationVault(deployer, address(core), address(dao), address(nft), address(0));
+        address usdc = vm.envAddress("USDC_ADDRESS");
+        DonationVault vault = new DonationVault(deployer, address(core), address(dao), address(nft), usdc);
         console.log("DonationVault:", address(vault));
 
         // 5. Wire up trusted contracts

@@ -24,11 +24,13 @@ async function main() {
 
   // 4. DonationVault
   const DonationVault = await ethers.getContractFactory("DonationVault");
+  const USDC_ADDRESS = process.env.USDC_ADDRESS!;
   const vault = await DonationVault.deploy(
     deployer.address,
     await core.getAddress(),
     await dao.getAddress(),
-    await nft.getAddress()
+    await nft.getAddress(),
+    USDC_ADDRESS
   );
   await vault.waitForDeployment();
   console.log("DonationVault:", await vault.getAddress());
@@ -46,7 +48,7 @@ async function main() {
       ["CharityCore",   await core.getAddress(),  [deployer.address]],
       ["ImpactNFT",     await nft.getAddress(),   [deployer.address]],
       ["GovernanceDAO", await dao.getAddress(),   [deployer.address]],
-      ["DonationVault", await vault.getAddress(), [deployer.address, await core.getAddress(), await dao.getAddress(), await nft.getAddress()]],
+      ["DonationVault", await vault.getAddress(), [deployer.address, await core.getAddress(), await dao.getAddress(), await nft.getAddress(), USDC_ADDRESS]],
     ] as [string, string, unknown[]][]) {
       try {
         await run("verify:verify", { address: addr, constructorArguments: args });
