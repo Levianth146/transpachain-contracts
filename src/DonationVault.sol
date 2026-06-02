@@ -9,6 +9,7 @@ import "./interfaces/IDonationVault.sol";
 import "./interfaces/ICharityCore.sol";
 import "./interfaces/IGovernanceDAO.sol";
 import "./interfaces/IImpactNFT.sol";
+import { TranspaChainErrors } from "./Errors.sol";
 
 /// @title DonationVault
 /// @notice ETH/USDC escrow with milestone-based release and pull-pattern refunds
@@ -71,7 +72,7 @@ contract DonationVault is IDonationVault, ReentrancyGuard, Ownable {
     }
 
     function donate(uint256 campaignId) external payable nonReentrant {
-        require(msg.value > 0, "Vault: amount=0");
+        if (msg.value == 0) revert TranspaChainErrors.ZeroAmount();
         ICharityCore.Campaign memory c = charityCore.getCampaign(campaignId);
         require(c.status == ICharityCore.CampaignStatus.Active, "Vault: not active");
         require(block.timestamp < c.deadline, "Vault: expired");
@@ -97,13 +98,15 @@ contract DonationVault is IDonationVault, ReentrancyGuard, Ownable {
 
         if (first) {
             impactNFT.mintImpactNFT(msg.sender, campaignId, _tier(msg.value), msg.value, c.metadataCID, uint8(ICharityCore.PaymentToken.ETH));
+        } else {
+            _syncDonorNFT(msg.sender, campaignId, netAmount);
         }
 
         emit DonationReceived(campaignId, msg.sender, msg.value, uint8(ICharityCore.PaymentToken.ETH));
     }
 
     function donateUSDC(uint256 campaignId, uint256 amount) external nonReentrant {
-        require(amount > 0, "Vault: amount=0");
+        if (amount == 0) revert TranspaChainErrors.ZeroAmount();
         ICharityCore.Campaign memory c = charityCore.getCampaign(campaignId);
         require(c.status == ICharityCore.CampaignStatus.Active, "Vault: not active");
         require(block.timestamp < c.deadline, "Vault: expired");
@@ -130,6 +133,8 @@ contract DonationVault is IDonationVault, ReentrancyGuard, Ownable {
 
         if (first) {
             impactNFT.mintImpactNFT(msg.sender, campaignId, _tier(amount), amount, c.metadataCID, uint8(ICharityCore.PaymentToken.USDC));
+        } else {
+            _syncDonorNFT(msg.sender, campaignId, netAmount);
         }
 
         emit DonationReceived(campaignId, msg.sender, amount, uint8(ICharityCore.PaymentToken.USDC));
@@ -312,5 +317,13 @@ contract DonationVault is IDonationVault, ReentrancyGuard, Ownable {
         if (amt >= 0.1 ether)  return IImpactNFT.DonorTier.Gold;
         if (amt >= 0.01 ether) return IImpactNFT.DonorTier.Silver;
         return IImpactNFT.DonorTier.Bronze;
+    }
+
+    /// @dev Update NFT cumulative donation and attempt tier upgrade (no-op if tier unchanged)
+    function _syncDonorNFT(address donor, uint256 campaignId, uint256 netAmount) internal {
+        uint256 tokenId = impactNFT.getDonorTokenForCampaign(donor, campaignId);
+        if (tokenId == 0) return;
+        impactNFT.addDonationAmount(tokenId, netAmount);
+        try impactNFT.upgradeTier(tokenId) {} catch {}
     }
 }

@@ -83,6 +83,9 @@ interface IImpactNFT {
 
     function upgradeTier(uint256 tokenId) external;
 
+    /// @notice Add to cumulative donated amount on an existing badge (repeat donations)
+    function addDonationAmount(uint256 tokenId, uint256 additionalAmount) external;
+
     /// @notice Update tokenURI when campaign milestone completes or campaign ends
     /// @dev Only DonationVault or CharityCore can call
     // function updateTokenURI(uint256 tokenId, string calldata newCID, bool completed) external;

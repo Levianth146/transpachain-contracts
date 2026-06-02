@@ -102,6 +102,13 @@ contract ImpactNFT is IImpactNFT, ERC721URIStorage, Ownable {
     }
 
     /// @inheritdoc IImpactNFT
+    function addDonationAmount(uint256 tokenId, uint256 additionalAmount) external onlyTrusted {
+        require(_ownerOf(tokenId) != address(0), "NFT: nonexistence");
+        require(additionalAmount > 0, "NFT: zero amount");
+        _metadata[tokenId].donatedAmount += additionalAmount;
+    }
+
+    /// @inheritdoc IImpactNFT
     function upgradeTier(uint256 tokenId) external onlyTrusted {
         require(_ownerOf(tokenId) != address(0), "NFT: nonexistence");
 

@@ -6,6 +6,7 @@ import "../src/CharityCore.sol";
 import "../src/DonationVault.sol";
 import "../src/GovernanceDAO.sol";
 import "../src/ImpactNFT.sol";
+import { TranspaChainErrors } from "../src/Errors.sol";
 
 /// @dev Minimal ERC-20 mock for USDC tests
 contract MockERC20 {
@@ -400,7 +401,7 @@ contract TranspaChainTest is Test {
     function testRevert_DonateZeroValue() public {
         uint256 id = _createCampaign();
         vm.prank(donor1);
-        vm.expectRevert("Vault: amount=0");
+        vm.expectRevert(abi.encodeWithSelector(TranspaChainErrors.ZeroAmount.selector));
         vault.donate{value: 0}(id);
     }
 

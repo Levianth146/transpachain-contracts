@@ -6,6 +6,7 @@ import "../src/DonationVault.sol";
 import "../src/CharityCore.sol";
 import "../src/GovernanceDAO.sol";
 import "../src/ImpactNFT.sol";
+import { TranspaChainErrors } from "../src/Errors.sol";
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
 // ─────────────────────────────────────────────
@@ -238,6 +239,23 @@ contract DonationVaultTest is Test {
         assertEq(nft.getDonorNFTs(donor1).length, 1);
     }
 
+    function test_donate_secondDonationUpgradesTier() public {
+        uint256 cid = _createCampaignETH();
+
+        vm.prank(donor1);
+        vault.donate{value: 0.005 ether}(cid);
+
+        uint256 tokenId = nft.getDonorTokenForCampaign(donor1, cid);
+        assertEq(uint8(nft.getNFTMetadata(tokenId).tier), uint8(IImpactNFT.DonorTier.Bronze));
+
+        vm.prank(donor1);
+        vault.donate{value: 0.02 ether}(cid);
+
+        IImpactNFT.NFTMetadata memory meta = nft.getNFTMetadata(tokenId);
+        assertEq(uint8(meta.tier), uint8(IImpactNFT.DonorTier.Silver));
+        assertGt(meta.donatedAmount, 0.02 ether);
+    }
+
     function test_donate_tierGold() public {
         uint256 cid = _createCampaignETH();
 
@@ -343,7 +361,7 @@ contract DonationVaultTest is Test {
         uint256 cid = _createCampaignETH();
 
         vm.prank(donor1);
-        vm.expectRevert("Vault: amount=0");
+        vm.expectRevert(abi.encodeWithSelector(TranspaChainErrors.ZeroAmount.selector));
         vault.donate{value: 0}(cid);
     }
 
@@ -434,7 +452,7 @@ contract DonationVaultTest is Test {
         uint256 cid = _createCampaignUSDC();
 
         vm.prank(donor1);
-        vm.expectRevert("Vault: amount=0");
+        vm.expectRevert(abi.encodeWithSelector(TranspaChainErrors.ZeroAmount.selector));
         vault.donateUSDC(cid, 0);
     }
 
