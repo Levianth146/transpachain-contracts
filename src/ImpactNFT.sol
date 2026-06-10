@@ -24,6 +24,8 @@ contract ImpactNFT is IImpactNFT, ERC721URIStorage, Ownable {
     /// @dev donor => campaignId => tokenId (0 = not minted)
     mapping(address => mapping(uint256 => uint256)) private _donorCampaignToken;
     mapping(uint256 => uint256[]) private _campaignNFTs;
+    /// @dev ERC-721 metadata CIDs per tier (Bronze / Silver / Gold) — set by owner after IPFS pin
+    mapping(DonorTier => string) private _tierMetadataCID;
 
     modifier onlyTrusted() {
         require(
@@ -47,6 +49,24 @@ contract ImpactNFT is IImpactNFT, ERC721URIStorage, Ownable {
         charityCore = _core;
     }
 
+    /// @notice Set IPFS CID for tier badge metadata JSON (name, description, image)
+    function setTierMetadataCID(DonorTier tier, string calldata cid) external onlyOwner {
+        require(bytes(cid).length > 0, "NFT: empty CID");
+        _tierMetadataCID[tier] = cid;
+        emit TierMetadataCIDSet(tier, cid);
+    }
+
+    function getTierMetadataCID(DonorTier tier) external view returns (string memory) {
+        return _tierMetadataCID[tier];
+    }
+
+    function _uriForTier(DonorTier tier, string calldata fallbackCID) internal view returns (string memory) {
+        string memory tierCid = _tierMetadataCID[tier];
+        if (bytes(tierCid).length > 0) return string.concat("ipfs://", tierCid);
+        if (bytes(fallbackCID).length > 0) return string.concat("ipfs://", fallbackCID);
+        return "";
+    }
+
     /// @inheritdoc IImpactNFT
     function mintImpactNFT(
         address donor,
@@ -67,7 +87,11 @@ contract ImpactNFT is IImpactNFT, ERC721URIStorage, Ownable {
         _campaignNFTs[campaignId].push(tokenId);
 
         _safeMint(donor, tokenId);
-        _setTokenURI(tokenId, string.concat("ipfs://", initialCID));
+        string memory uri = _uriForTier(tier, initialCID);
+        if (bytes(uri).length > 0) _setTokenURI(tokenId, uri);
+
+        string memory tierCid = _tierMetadataCID[tier];
+        string memory storedCid = bytes(tierCid).length > 0 ? tierCid : initialCID;
 
         _metadata[tokenId] = NFTMetadata({
             campaignId: campaignId,
@@ -76,7 +100,7 @@ contract ImpactNFT is IImpactNFT, ERC721URIStorage, Ownable {
             donatedAmount: donatedAmount,
             impactScore: 0,
             campaignCompleted: false,
-            metadataCID: initialCID,
+            metadataCID: storedCid,
             paymentToken: paymentToken
         });
 
@@ -139,6 +163,13 @@ contract ImpactNFT is IImpactNFT, ERC721URIStorage, Ownable {
 
         DonorTier oldTier = data.tier;
         data.tier = newTier;
+
+        string memory newCid = _tierMetadataCID[newTier];
+        if (bytes(newCid).length > 0) {
+            data.metadataCID = newCid;
+            _setTokenURI(tokenId, string.concat("ipfs://", newCid));
+        }
+
         emit TierUpgraded(tokenId, oldTier, newTier);
     }
 

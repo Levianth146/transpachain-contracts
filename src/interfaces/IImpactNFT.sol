@@ -57,6 +57,8 @@ interface IImpactNFT {
         DonorTier newTier
     );
 
+    event TierMetadataCIDSet(DonorTier indexed tier, string cid);
+
     // ─────────────────────────────────────────────
     // Write Functions
     // ─────────────────────────────────────────────
@@ -118,4 +120,8 @@ interface IImpactNFT {
     function getCampaignNFTs(
         uint256 campaignId
     ) external view returns (uint256[] memory);
+
+    function setTierMetadataCID(DonorTier tier, string calldata cid) external;
+
+    function getTierMetadataCID(DonorTier tier) external view returns (string memory);
 }
