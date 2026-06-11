@@ -239,7 +239,7 @@ contract GovernanceDAOTest is Test {
         assertEq(p.forVotes, 0);
         assertEq(p.againstVotes, 0);
         assertEq(p.abstainVotes, 0);
-        assertEq(p.totalVotingPower, vault.getCampaignEscrowBalance(cid));
+        assertEq(p.totalVotingPower, dao.getVotingPower(cid, donor1));
         assertEq(uint8(p.state), uint8(IGovernanceDAO.ProposalState.Active));
         assertEq(p.snapshotBlock, block.number);
     }
@@ -314,7 +314,7 @@ contract GovernanceDAOTest is Test {
         dao.castVote(pid, IGovernanceDAO.VoteChoice.For);
 
         IGovernanceDAO.Proposal memory p = dao.getProposal(pid);
-        uint256 expectedWeight = vault.getDonorAmount(cid, donor1);
+        uint256 expectedWeight = dao.quadraticWeight(vault.getDonorAmount(cid, donor1));
         assertEq(p.forVotes, expectedWeight);
     }
 
@@ -326,7 +326,7 @@ contract GovernanceDAOTest is Test {
         dao.castVote(pid, IGovernanceDAO.VoteChoice.Against);
 
         IGovernanceDAO.Proposal memory p = dao.getProposal(pid);
-        uint256 expectedWeight = vault.getDonorAmount(cid, donor1);
+        uint256 expectedWeight = dao.quadraticWeight(vault.getDonorAmount(cid, donor1));
         assertEq(p.againstVotes, expectedWeight);
     }
 
@@ -338,14 +338,14 @@ contract GovernanceDAOTest is Test {
         dao.castVote(pid, IGovernanceDAO.VoteChoice.Abstain);
 
         IGovernanceDAO.Proposal memory p = dao.getProposal(pid);
-        uint256 expectedWeight = vault.getDonorAmount(cid, donor1);
+        uint256 expectedWeight = dao.quadraticWeight(vault.getDonorAmount(cid, donor1));
         assertEq(p.abstainVotes, expectedWeight);
     }
 
     function test_castVote_emitsVoteCast() public {
         uint256 cid = _createCampaignETH();
         uint256 pid = _donateAndCreateProposal(cid, 1 ether);
-        uint256 weight = vault.getDonorAmount(cid, donor1);
+        uint256 weight = dao.quadraticWeight(vault.getDonorAmount(cid, donor1));
 
         vm.prank(donor1);
         vm.expectEmit(true, true, false, true);
@@ -386,8 +386,8 @@ contract GovernanceDAOTest is Test {
         dao.castVote(pid, IGovernanceDAO.VoteChoice.Against);
 
         IGovernanceDAO.Proposal memory p = dao.getProposal(pid);
-        assertEq(p.forVotes, vault.getDonorAmount(cid, donor1));
-        assertEq(p.againstVotes, vault.getDonorAmount(cid, donor2));
+        assertEq(p.forVotes, dao.quadraticWeight(vault.getDonorAmount(cid, donor1)));
+        assertEq(p.againstVotes, dao.quadraticWeight(vault.getDonorAmount(cid, donor2)));
     }
 
     // ─── castVote revert cases ───
@@ -938,7 +938,7 @@ contract GovernanceDAOTest is Test {
         vm.prank(donor1);
         vault.donate{value: 3 ether}(cid);
 
-        uint256 expectedPower = vault.getDonorAmount(cid, donor1);
+        uint256 expectedPower = dao.quadraticWeight(vault.getDonorAmount(cid, donor1));
         assertEq(dao.getVotingPower(cid, donor1), expectedPower);
     }
 
@@ -1198,5 +1198,64 @@ contract GovernanceDAOTest is Test {
             uint8(dao.getProposalState(pid)),
             uint8(IGovernanceDAO.ProposalState.Cancelled)
         );
+    }
+
+    // ─────────────────────────────────────────────
+    // closeProposal (verifier / admin)
+    // ─────────────────────────────────────────────
+
+    function test_closeProposal_byVerifier() public {
+        uint256 cid = _createCampaignETH();
+        uint256 pid = _donateAndCreateProposal(cid, 1 ether);
+
+        vm.prank(admin);
+        dao.closeProposal(pid, "suspected manipulation");
+
+        assertEq(
+            uint8(dao.getProposalState(pid)),
+            uint8(IGovernanceDAO.ProposalState.Cancelled)
+        );
+    }
+
+    function test_closeProposal_revertsIfNotAuthorized() public {
+        uint256 cid = _createCampaignETH();
+        uint256 pid = _donateAndCreateProposal(cid, 1 ether);
+
+        vm.prank(nobody);
+        vm.expectRevert("DAO: not authorized");
+        dao.closeProposal(pid, "spam");
+    }
+
+    function test_closeProposal_revertsIfExecuted() public {
+        uint256 cid = _createCampaignETH();
+        uint256 pid = _donateAndCreateProposal(cid, 5 ether);
+
+        vm.prank(donor1);
+        dao.castVote(pid, IGovernanceDAO.VoteChoice.For);
+        _advancePastVotingPeriod();
+        dao.queueProposal(pid);
+        _advancePastTimelock();
+        dao.executeProposal(pid);
+
+        vm.prank(admin);
+        vm.expectRevert("DAO: cannot close");
+        dao.closeProposal(pid, "too late");
+    }
+
+    // ─────────────────────────────────────────────
+    // Quadratic weighting
+    // ─────────────────────────────────────────────
+
+    function test_quadraticWeight_sublinearVsDonation() public {
+        uint256 donation = 4 ether;
+        assertLt(dao.quadraticWeight(donation), donation);
+        assertGt(dao.quadraticWeight(donation), dao.quadraticWeight(1 ether));
+    }
+
+    function testFuzz_quadraticWeight_monotonic(uint96 amount) public {
+        vm.assume(amount > 0);
+        uint256 w = dao.quadraticWeight(amount);
+        assertGt(w, 0);
+        assertLe(w, amount);
     }
 }

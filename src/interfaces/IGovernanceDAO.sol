@@ -68,6 +68,11 @@ interface IGovernanceDAO {
         uint256 indexed newProposalId,
         uint256 indexed oldProposalId
     );
+    event ProposalClosed(
+        uint256 indexed proposalId,
+        address indexed closedBy,
+        string reason
+    );
 
     // ─────────────────────────────────────────────
     // Write Functions
@@ -93,6 +98,9 @@ interface IGovernanceDAO {
     /// @notice Cancel proposal (admin / emergency)
     function cancelProposal(uint256 proposalId) external;
 
+    /// @notice Close proposal immediately (admin or verifier — anti-manipulation)
+    function closeProposal(uint256 proposalId, string calldata reason) external;
+
     // ─────────────────────────────────────────────
     // View Functions
     // ─────────────────────────────────────────────
@@ -110,10 +118,18 @@ interface IGovernanceDAO {
         address voter
     ) external view returns (bool);
 
+    /// @notice Quadratic voting power = sqrt(donation wei)
     function getVotingPower(
         uint256 campaignId,
         address voter
     ) external view returns (uint256);
+
+    function getDonorLinearAmount(
+        uint256 campaignId,
+        address donor
+    ) external view returns (uint256);
+
+    function quadraticWeight(uint256 amountWei) external pure returns (uint256);
 
     function getCampaignProposals(
         uint256 campaignId
