@@ -61,6 +61,14 @@ pm2 restart transpachain-backend   # or your process manager
 - [ ] Defeated milestone → org can submit new proof CID
 - [ ] Frontend Finalize disabled until `canFinalize` true; clear error messages
 
+## Current Sepolia
+
+- CharityCore: `0x8a5e023b16ab13939260492dAe72a0be1E597e1a`
+- DonationVault: `0x68Bb9f5E1414b1a62372EbF02fdEe4c09fFc7C32`
+- GovernanceDAO: `0xCcAEaF248E536850877B9f948cB237Fe7885b513`
+- ImpactNFT: `0xD651d3531a44ee7941bFE257c79F41d274E180A6`
+- Deploy block: `11102718` (`DEPLOY_FROM_BLOCK`)
+
 ## Previous Sepolia (deprecated)
 
 - CharityCore: `0xA13344e56a2421322bb2985ffE37b07DB80B760d`

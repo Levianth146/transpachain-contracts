@@ -6,7 +6,7 @@
  *
  * Usage (from transpachain-contracts root):
  *   PINATA_API_KEY=... PINATA_SECRET_KEY=... \
- *   IMPACT_NFT_ADDRESS=0x17CcdcF683626B5c914640154464bF64Ca66DB18 \
+ *   IMPACT_NFT_ADDRESS=0xD651d3531a44ee7941bFE257c79F41d274E180A6 \
  *   PRIVATE_KEY=... SEPOLIA_RPC_URL=... \
  *   npx ts-node hardhat/scripts/setTierMetadata.ts
  *
@@ -149,7 +149,7 @@ async function main() {
   const rpc = process.env.SEPOLIA_RPC_URL || process.env.ALCHEMY_SEPOLIA_URL;
   const pk = process.env.PRIVATE_KEY;
   const nftAddress =
-    process.env.IMPACT_NFT_ADDRESS || "0x17CcdcF683626B5c914640154464bF64Ca66DB18";
+    process.env.IMPACT_NFT_ADDRESS || "0xD651d3531a44ee7941bFE257c79F41d274E180A6";
 
   if (!rpc || !pk) {
     throw new Error("Set SEPOLIA_RPC_URL (or ALCHEMY_SEPOLIA_URL) and PRIVATE_KEY");
