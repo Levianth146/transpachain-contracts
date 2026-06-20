@@ -1,0 +1,10 @@
+{
+  "name": "TranspaChain Impact — Bronze",
+  "description": "Retro bronze donor badge. Earned by supporting a TranspaChain campaign on Sepolia.",
+  "image": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI1MTIiIGhlaWdodD0iNTEyIiB2aWV3Qm94PSIwIDAgNTEyIDUxMiI+PHN0eWxlPi5waXhlbntpbWFnZS1yZW5kZXJpbmc6cGl4ZWwtYXR0O319PC9zdHlsZT48cmVjdCB3aWR0aD0iNTEyIiBoZWlnaHQ9IjUxMiIgZmlsbD0iIzBmMTExNSIvPjxyZWN0IHdpZHRoPSI1MTIiIGhlaWdodD0iNTEyIiBmaWxsPSJ1cmwoI2cpIG9wYWNpdHk9Ii4zNSIvPjxkZWZzPjxsaW5lYXJHcmFkaWVudCBpZD0iZyIgeDE9IjAlIiB5MT0iMCUiIHgyPSIxMDAlIiB5Mj0iMTAwJSI+PHN0b3Agb2Zmc2V0PSIwJSIgc3RvcC1jb2xvcj0iI2ZmOTkwMCIvPjxzdG9wIG9mZnNldD0iMTAwJSIgc3RvcC1jb2xvcj0iI2ZmNjAwMCIvPjwvbGluZWFyR3JhZGllbnQ+PC9kZWZzPjxyZWN0IGNsYXNzPSJwaXhlIiB4PSI2NCIgeT0iNjQiIHdpZHRoPSIzODQiIGhlaWdodD0iMzg0IiBmaWxsPSIjY2E4YTM0IiByeD0iMTYiIHN0cm9rZT0iIzAwZDJmZiIgc3Ryb2tlLXdpZHRoPSI4Ii8+PHRleHQgeD0iMjU2IiB5PSIyNDAiIGZvbnQtZmFtaWx5PSJtb25vc3BhY2UiIGZvbnQtc2l6ZT0iNDgiIGZpbGw9IiNmZmZmMDAiIHRleHQtYW5jaG9yPSJtaWRkbGUiPkJST05aRTwvdGV4dD48dGV4dCB4PSIyNTYiIHk9IjMwMCIgZm9udC1mYW1pbHk9Im1vbm9zcGFjZSIgZm9udC1zaXplPSIyNCIgZmlsbD0iI2ZmZmZmZiIgdGV4dC1hbmNob3I9Im1pZGRsZSI+SU1QQUNUIE5GVDwvdGV4dD48dGV4dCB4PSIyNTYiIHk9IjM2MCIgZm9udC1mYW1pbHk9Im1vbm9zcGFjZSIgZm9udC1zaXplPSIxOCIgZmlsbD0iIzAwZDJmZiIgdGV4dC1hbmNob3I9Im1pZGRsZSI+U2Vwb2xpYSBUZXN0bmV0PC90ZXh0Pjwvc3ZnPg==",
+  "attributes": [
+    { "trait_type": "Tier", "value": "Bronze" },
+    { "trait_type": "Style", "value": "Retro Pixel" },
+    { "trait_type": "Network", "value": "Sepolia" }
+  ]
+}
