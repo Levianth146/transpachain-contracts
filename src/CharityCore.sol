@@ -152,7 +152,6 @@ contract CharityCore is ICharityCore, AccessControl, Pausable {
         Campaign storage c = _campaigns[campaignId];
         require(msg.sender == c.orgAddress,        "CharityCore: not org");
         require(c.status == CampaignStatus.Active, "CharityCore: not active");
-        require(c.raisedAmount == 0,               "CharityCore: has donors");
         c.status      = CampaignStatus.Cancelled;
         c.cancelledAt = block.timestamp;
         emit CampaignCancelled(campaignId, msg.sender, block.timestamp);
@@ -170,13 +169,27 @@ contract CharityCore is ICharityCore, AccessControl, Pausable {
 
     function finalizeCampaign(uint256 campaignId) external campaignExists(campaignId) {
         Campaign storage c = _campaigns[campaignId];
-        require(c.status == CampaignStatus.Active,  "CharityCore: not active");
-        require(block.timestamp > c.deadline,        "CharityCore: not expired");
-        CampaignStatus finalStatus = c.raisedAmount >= c.goalAmount
+        require(c.status == CampaignStatus.Active, "CharityCore: not active");
+        bool goalReached = c.raisedAmount >= c.goalAmount;
+        bool expired     = block.timestamp > c.deadline;
+        require(goalReached || expired, "CharityCore: cannot finalize");
+        CampaignStatus finalStatus = goalReached
             ? CampaignStatus.Successful
             : CampaignStatus.Failed;
         c.status = finalStatus;
         emit CampaignFinalized(campaignId, finalStatus);
+    }
+
+    /// @notice Whether an active campaign may be finalized (goal met or deadline passed).
+    function canFinalize(uint256 campaignId)
+        external view campaignExists(campaignId)
+        returns (bool eligible, bool goalReached, bool expired)
+    {
+        Campaign storage c = _campaigns[campaignId];
+        if (c.status != CampaignStatus.Active) return (false, false, false);
+        goalReached = c.raisedAmount >= c.goalAmount;
+        expired     = block.timestamp > c.deadline;
+        eligible    = goalReached || expired;
     }
 
     function extendDeadline(uint256 campaignId, uint256 newDeadline)

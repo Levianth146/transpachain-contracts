@@ -4,7 +4,7 @@ pragma solidity ^0.8.20;
 /// @title IGovernanceDAO
 /// @notice Interface for milestone approval voting
 /// @dev Voting power = ETH donated to that specific campaign
-///      Quorum = 51% of total donated ETH
+///      Quorum = 51% of cast vote weight among participating voters
 ///      Voting period = 3 days (configurable)
 ///      Timelock = 24h before execution (anti flash-loan)
 interface IGovernanceDAO {

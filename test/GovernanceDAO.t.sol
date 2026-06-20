@@ -485,9 +485,9 @@ contract GovernanceDAOTest is Test {
         dao.queueProposal(pid);
     }
 
-    function test_queueProposal_quorumNotMet_defeats() public {
+    function test_queueProposal_singleVoter_passesAmongVoters() public {
         uint256 cid = _createCampaignETH();
-        // 3 donors, only 1 votes For (donor1 has ~33% < 51%)
+        // 3 donors but only 1 participates — 100% of cast votes are For
         uint256 pid = _donateMultipleAndCreateProposal(
             cid,
             2 ether,
@@ -499,11 +499,36 @@ contract GovernanceDAOTest is Test {
         dao.castVote(pid, IGovernanceDAO.VoteChoice.For);
 
         _advancePastVotingPeriod();
-
         dao.queueProposal(pid);
 
-        IGovernanceDAO.Proposal memory p = dao.getProposal(pid);
-        assertEq(uint8(p.state), uint8(IGovernanceDAO.ProposalState.Defeated));
+        assertEq(
+            uint8(dao.getProposalState(pid)),
+            uint8(IGovernanceDAO.ProposalState.Queued)
+        );
+    }
+
+    function test_queueProposal_quorumNotMet_defeats() public {
+        uint256 cid = _createCampaignETH();
+        // Equal For/Against weight among voters → 50% < 51%
+        uint256 pid = _donateMultipleAndCreateProposal(
+            cid,
+            2 ether,
+            2 ether,
+            0
+        );
+
+        vm.prank(donor1);
+        dao.castVote(pid, IGovernanceDAO.VoteChoice.For);
+        vm.prank(donor2);
+        dao.castVote(pid, IGovernanceDAO.VoteChoice.Against);
+
+        _advancePastVotingPeriod();
+        dao.queueProposal(pid);
+
+        assertEq(
+            uint8(dao.getProposalState(pid)),
+            uint8(IGovernanceDAO.ProposalState.Defeated)
+        );
     }
 
     function test_queueProposal_againstWins_defeats() public {
@@ -542,6 +567,8 @@ contract GovernanceDAOTest is Test {
 
         vm.prank(donor1);
         dao.castVote(pid, IGovernanceDAO.VoteChoice.For);
+        vm.prank(donor2);
+        dao.castVote(pid, IGovernanceDAO.VoteChoice.Against);
 
         _advancePastVotingPeriod();
 
@@ -729,9 +756,11 @@ contract GovernanceDAOTest is Test {
             2 ether
         );
 
-        // Only donor1 votes For → quorum not met → Defeated
+        // For/Against split → defeated
         vm.prank(donor1);
         dao.castVote(pid, IGovernanceDAO.VoteChoice.For);
+        vm.prank(donor2);
+        dao.castVote(pid, IGovernanceDAO.VoteChoice.Against);
 
         _advancePastVotingPeriod();
         dao.queueProposal(pid);
@@ -769,6 +798,8 @@ contract GovernanceDAOTest is Test {
 
         vm.prank(donor1);
         dao.castVote(pid, IGovernanceDAO.VoteChoice.For);
+        vm.prank(donor2);
+        dao.castVote(pid, IGovernanceDAO.VoteChoice.Against);
 
         _advancePastVotingPeriod();
         dao.queueProposal(pid);
@@ -789,6 +820,8 @@ contract GovernanceDAOTest is Test {
 
         vm.prank(donor1);
         dao.castVote(pid, IGovernanceDAO.VoteChoice.For);
+        vm.prank(donor2);
+        dao.castVote(pid, IGovernanceDAO.VoteChoice.Against);
 
         _advancePastVotingPeriod();
         dao.queueProposal(pid);
@@ -815,6 +848,8 @@ contract GovernanceDAOTest is Test {
 
         vm.prank(donor1);
         dao.castVote(pid, IGovernanceDAO.VoteChoice.For);
+        vm.prank(donor2);
+        dao.castVote(pid, IGovernanceDAO.VoteChoice.Against);
 
         _advancePastVotingPeriod();
         dao.queueProposal(pid);
@@ -839,6 +874,8 @@ contract GovernanceDAOTest is Test {
         // Defeat the first proposal
         vm.prank(donor1);
         dao.castVote(pid, IGovernanceDAO.VoteChoice.For);
+        vm.prank(donor2);
+        dao.castVote(pid, IGovernanceDAO.VoteChoice.Against);
         _advancePastVotingPeriod();
         dao.queueProposal(pid);
 
@@ -1040,9 +1077,11 @@ contract GovernanceDAOTest is Test {
         vault.submitMilestoneProof(cid, 0, "QmProof0");
         uint256 pid1 = dao.getActiveProposal(cid);
 
-        // Only 1/3 votes For → quorum not met
+        // Only donor1 votes For; donor2 Against → defeated
         vm.prank(donor1);
         dao.castVote(pid1, IGovernanceDAO.VoteChoice.For);
+        vm.prank(donor2);
+        dao.castVote(pid1, IGovernanceDAO.VoteChoice.Against);
 
         _advancePastVotingPeriod();
         dao.queueProposal(pid1);
@@ -1126,16 +1165,18 @@ contract GovernanceDAOTest is Test {
 
     function test_queueProposal_justBelowQuorum_defeats() public {
         uint256 cid = _createCampaignETH();
-        // 3 equal donors, only 1 votes → ~33% < 51%
+        // Equal split among two voters → 50% For < 51%
         uint256 pid = _donateMultipleAndCreateProposal(
             cid,
             2 ether,
             2 ether,
-            2 ether
+            0
         );
 
         vm.prank(donor1);
         dao.castVote(pid, IGovernanceDAO.VoteChoice.For);
+        vm.prank(donor2);
+        dao.castVote(pid, IGovernanceDAO.VoteChoice.Against);
 
         _advancePastVotingPeriod();
         dao.queueProposal(pid);

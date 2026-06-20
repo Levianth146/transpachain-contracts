@@ -41,6 +41,23 @@ async function main() {
   await dao.setDonationVault(await vault.getAddress());
   console.log("Contracts wired.");
 
+  const coreAddr = await core.getAddress();
+  const vaultAddr = await vault.getAddress();
+  const daoAddr = await dao.getAddress();
+  const nftAddr = await nft.getAddress();
+
+  console.log("\n--- Update .env (backend + frontend) ---");
+  console.log(`CHARITY_CORE_ADDRESS=${coreAddr}`);
+  console.log(`DONATION_VAULT_ADDRESS=${vaultAddr}`);
+  console.log(`GOVERNANCE_DAO_ADDRESS=${daoAddr}`);
+  console.log(`IMPACT_NFT_ADDRESS=${nftAddr}`);
+  console.log(`NEXT_PUBLIC_CHARITY_CORE_ADDRESS=${coreAddr}`);
+  console.log(`NEXT_PUBLIC_DONATION_VAULT_ADDRESS=${vaultAddr}`);
+  console.log(`NEXT_PUBLIC_GOVERNANCE_DAO_ADDRESS=${daoAddr}`);
+  console.log(`NEXT_PUBLIC_IMPACT_NFT_ADDRESS=${nftAddr}`);
+  console.log("DEPLOY_FROM_BLOCK=<deployment block number>");
+  console.log("See DEPLOY_CHECKLIST.md for EC2 restart steps.\n");
+
   // 6. Verify on Etherscan (Sepolia)
   if (process.env.ETHERSCAN_API_KEY) {
     console.log("Verifying on Etherscan...");

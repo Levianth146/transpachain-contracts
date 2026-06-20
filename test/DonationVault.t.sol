@@ -577,8 +577,39 @@ contract DonationVaultTest is Test {
         vault.submitMilestoneProof(cid, 0, "QmProof0");
 
         vm.prank(org);
-        vm.expectRevert("Vault: invalid state");
+        vm.expectRevert("Vault: proposal pending");
         vault.submitMilestoneProof(cid, 0, "QmProof1");
+    }
+
+    function test_submitMilestoneProof_allowsResubmitAfterDefeat() public {
+        uint256 cid = _createCampaignETH();
+
+        vm.prank(donor1);
+        vault.donate{value: 2 ether}(cid);
+        vm.prank(donor2);
+        vault.donate{value: 2 ether}(cid);
+
+        vm.prank(org);
+        vault.submitMilestoneProof(cid, 0, "QmProof0");
+        uint256 pid = dao.getActiveProposal(cid);
+
+        vm.prank(donor1);
+        dao.castVote(pid, IGovernanceDAO.VoteChoice.For);
+        vm.prank(donor2);
+        dao.castVote(pid, IGovernanceDAO.VoteChoice.Against);
+        vm.roll(block.number + 21601);
+        dao.queueProposal(pid);
+        assertEq(
+            uint8(dao.getProposalState(pid)),
+            uint8(IGovernanceDAO.ProposalState.Defeated)
+        );
+
+        vm.prank(org);
+        vault.submitMilestoneProof(cid, 0, "QmProofResubmit");
+
+        uint256 newPid = dao.getActiveProposal(cid);
+        assertGt(newPid, pid);
+        assertEq(vault.getMilestone(cid, 0).proofCID, "QmProofResubmit");
     }
 
     // ─────────────────────────────────────────────
@@ -1064,7 +1095,7 @@ contract DonationVaultTest is Test {
         vault.donate{value: 1 ether}(cid);
 
         vm.prank(admin);
-        vm.expectRevert("Vault: not failed");
+        vm.expectRevert("Vault: not refundable");
         vault.emergencyRefundBatch(cid, 0, 100);
     }
 

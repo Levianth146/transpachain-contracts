@@ -10,7 +10,7 @@ import "./interfaces/IDonationVault.sol";
 /// @title GovernanceDAO
 /// @notice Milestone approval voting with quadratic weighting (sqrt of donation)
 /// @dev Voting power = sqrt(ETH donated) — Sybil-resistant vs linear stake
-///      Quorum = 51% of total quadratic power
+///      Quorum = 51% of cast vote weight (participating voters only, not all donors)
 ///      Admin approval gate: off-chain (backend) before public listing
 ///      closeProposal: owner or verifier can halt manipulation
 contract GovernanceDAO is IGovernanceDAO, Ownable, Pausable {
@@ -160,8 +160,9 @@ contract GovernanceDAO is IGovernanceDAO, Ownable, Pausable {
         require(p.state == ProposalState.Active, "DAO: not active");
         require(block.number > p.endBlock, "DAO: voting ongoing");
 
-        bool quorumMet = p.totalVotingPower > 0 &&
-            ((p.forVotes * 10000) / p.totalVotingPower) >= QUORUM_BPS;
+        bool quorumMet = p.forVotes + p.againstVotes + p.abstainVotes > 0 &&
+            ((p.forVotes * 10000) /
+                (p.forVotes + p.againstVotes + p.abstainVotes)) >= QUORUM_BPS;
 
         if (quorumMet && p.forVotes > p.againstVotes) {
             p.state = ProposalState.Queued;

@@ -38,6 +38,7 @@ interface ICharityCore {
     function cancelCampaign(uint256 campaignId) external;
     function adminCancelCampaign(uint256 campaignId) external;
     function finalizeCampaign(uint256 campaignId) external;
+    function canFinalize(uint256 campaignId) external view returns (bool eligible, bool goalReached, bool expired);
     function extendDeadline(uint256 campaignId, uint256 newDeadline) external;
     function updateCampaignInfo(uint256 campaignId, string calldata newCID) external;
 

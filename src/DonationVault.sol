@@ -76,6 +76,7 @@ contract DonationVault is IDonationVault, ReentrancyGuard, Ownable {
         ICharityCore.Campaign memory c = charityCore.getCampaign(campaignId);
         require(c.status == ICharityCore.CampaignStatus.Active, "Vault: not active");
         require(block.timestamp < c.deadline, "Vault: expired");
+        require(c.raisedAmount < c.goalAmount, "Vault: goal reached");
         require(c.paymentToken == ICharityCore.PaymentToken.ETH, "Vault: not ETH campaign");
 
         bool first        = _donorBalances[campaignId][msg.sender] == 0;
@@ -110,6 +111,7 @@ contract DonationVault is IDonationVault, ReentrancyGuard, Ownable {
         ICharityCore.Campaign memory c = charityCore.getCampaign(campaignId);
         require(c.status == ICharityCore.CampaignStatus.Active, "Vault: not active");
         require(block.timestamp < c.deadline, "Vault: expired");
+        require(c.raisedAmount < c.goalAmount, "Vault: goal reached");
         require(c.paymentToken == ICharityCore.PaymentToken.USDC, "Vault: not USDC campaign");
 
         bool first        = _donorBalances[campaignId][msg.sender] == 0;
@@ -149,7 +151,15 @@ contract DonationVault is IDonationVault, ReentrancyGuard, Ownable {
         require(bytes(proofCID).length > 0, "Vault: empty proof");
 
         Milestone storage m = _milestones[campaignId][idx];
-        require(!m.released && m.proposalId == 0, "Vault: invalid state");
+        require(!m.released, "Vault: already released");
+        if (m.proposalId != 0) {
+            IGovernanceDAO.ProposalState state = governanceDAO.getProposalState(m.proposalId);
+            require(
+                state == IGovernanceDAO.ProposalState.Defeated ||
+                    state == IGovernanceDAO.ProposalState.Cancelled,
+                "Vault: proposal pending"
+            );
+        }
 
         uint256 remaining = c.totalMilestones - c.completedMilestones;
         m.releaseAmount   = remaining > 0 ? _escrowBalances[campaignId] / remaining : 0;
@@ -186,7 +196,9 @@ contract DonationVault is IDonationVault, ReentrancyGuard, Ownable {
     function claimRefund(uint256 campaignId) external nonReentrant {
         ICharityCore.Campaign memory c = charityCore.getCampaign(campaignId);
         require(
-            c.status == ICharityCore.CampaignStatus.Failed || block.timestamp > c.deadline,
+            c.status == ICharityCore.CampaignStatus.Failed ||
+                c.status == ICharityCore.CampaignStatus.Cancelled ||
+                block.timestamp > c.deadline,
             "Vault: not refundable"
         );
         uint256 amount = _donorBalances[campaignId][msg.sender];
@@ -217,7 +229,11 @@ contract DonationVault is IDonationVault, ReentrancyGuard, Ownable {
         external onlyOwner nonReentrant
     {
         ICharityCore.Campaign memory c = charityCore.getCampaign(campaignId);
-        require(c.status == ICharityCore.CampaignStatus.Failed, "Vault: not failed");
+        require(
+            c.status == ICharityCore.CampaignStatus.Failed ||
+                c.status == ICharityCore.CampaignStatus.Cancelled,
+            "Vault: not refundable"
+        );
 
         address[] storage donorList = _donorList[campaignId];
         uint256 end = offset + limit;
@@ -298,6 +314,7 @@ contract DonationVault is IDonationVault, ReentrancyGuard, Ownable {
         refundDeadline = c.deadline + maxRefundPeriod;
         if (amount == 0) return (false, 0, refundDeadline);
         if (c.status == ICharityCore.CampaignStatus.Failed) return (true, amount, refundDeadline);
+        if (c.status == ICharityCore.CampaignStatus.Cancelled) return (true, amount, refundDeadline);
         if (block.timestamp > c.deadline) return (true, amount, refundDeadline);
         return (false, 0, refundDeadline);
     }

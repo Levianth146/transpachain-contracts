@@ -1,31 +1,69 @@
-# TranspaChain Redeploy Checklist
+# TranspaChain Redeploy Checklist (v2 — campaign lifecycle fix)
 
-## When redeploy is required
+## What changed (requires full redeploy)
 
-Redeploy **GovernanceDAO** (and re-wire trusted addresses) after:
+- **CharityCore**: finalize when goal met OR deadline passed; cancel anytime; `canFinalize()` view
+- **DonationVault**: block donations at goal; cancel refunds; resubmit milestone proof after defeated vote
+- **GovernanceDAO**: quorum based on participating voters (cast weight), not all donors
 
-- Quadratic voting (`quadraticWeight`, updated `totalVotingPower`)
-- `closeProposal(proposalId, reason)` for admin/verifier
-- `getDonorLinearAmount` view helper
+## Pre-deploy
 
-No redeploy needed for frontend/backend-only changes (admin close off-chain, UI, indexer).
+```bash
+cd /root/projects/transpachain-contracts
+forge test   # expect 303+ passing
+```
 
-## Deploy steps
+## Sepolia deploy (Hardhat)
 
-1. `cd contracts && forge test` — all tests green
-2. Deploy new `GovernanceDAO` via existing script
-3. `dao.setDonationVault(vaultAddress)`
-4. `dao.setVerifier(verifierWallet)` — match CharityCore VERIFIER_ROLE holder
-5. `vault` / `core`: update `governanceDAO` pointer (see `CharityCore.setTrustedContracts`)
-6. Update env:
-   - `GOVERNANCE_DAO_ADDRESS`
-   - `NEXT_PUBLIC_GOVERNANCE_DAO_ADDRESS`
-7. Restart backend indexer (historical sync for open proposals optional)
-8. Verify on Sepolia: create campaign → donate → submit proof → vote → queue → execute
+```bash
+cd /root/projects/transpachain-contracts
+# Ensure .env has SEPOLIA_RPC_URL, DEPLOYER_PRIVATE_KEY, USDC_ADDRESS, ETHERSCAN_API_KEY
+npx hardhat run hardhat/scripts/deploy.ts --network sepolia
+```
 
-## Post-deploy verification
+Save printed addresses — update **all** of:
 
-- [ ] `getVotingPower` returns sqrt weight
-- [ ] `closeProposal` callable by verifier wallet
-- [ ] Frontend governance hub shows on-chain QV totals
-- [ ] Admin approve flow still gates public listing
+| Env var | Where |
+|---------|--------|
+| `CHARITY_CORE_ADDRESS` | backend `.env`, EC2 |
+| `DONATION_VAULT_ADDRESS` | backend `.env`, EC2 |
+| `GOVERNANCE_DAO_ADDRESS` | backend `.env`, EC2 |
+| `IMPACT_NFT_ADDRESS` | backend `.env` (if used) |
+| `NEXT_PUBLIC_CHARITY_CORE_ADDRESS` | frontend `.env` / Vercel |
+| `NEXT_PUBLIC_DONATION_VAULT_ADDRESS` | frontend |
+| `NEXT_PUBLIC_GOVERNANCE_DAO_ADDRESS` | frontend |
+| `NEXT_PUBLIC_IMPACT_NFT_ADDRESS` | frontend |
+| `DEPLOY_FROM_BLOCK` | backend — set to deploy tx block, then `0` after first sync |
+
+## Post-deploy on-chain wiring (if not in script)
+
+1. `core.setTrustedContracts(vault, dao)`
+2. `nft.setTrustedContracts(vault, core)`
+3. `dao.setDonationVault(vault)`
+4. `dao.setVerifier(verifierWallet)` — same as CharityCore VERIFIER_ROLE holder
+5. Verify org wallets: `core.verifyOrg(orgAddress)`
+
+## EC2 / production restart
+
+```bash
+# On EC2 backend host
+cd transpachain-backend && git pull && npm ci && npm run build
+# Update .env with new addresses + DEPLOY_FROM_BLOCK
+pm2 restart transpachain-backend   # or your process manager
+```
+
+## Verification checklist
+
+- [ ] Goal reached → donate reverts `Vault: goal reached`
+- [ ] Goal reached → org can finalize **before** deadline (no `CharityCore: not expired`)
+- [ ] Org cancel with donors → donors can `claimRefund`
+- [ ] Single voter For passes quorum (among voters, not all donors)
+- [ ] Defeated milestone → org can submit new proof CID
+- [ ] Frontend Finalize disabled until `canFinalize` true; clear error messages
+
+## Previous Sepolia (deprecated)
+
+- CharityCore: `0xA13344e56a2421322bb2985ffE37b07DB80B760d`
+- DonationVault: `0x72116A0BCe20473FE1BfcC2da9D2337A6D39Ed5c`
+- GovernanceDAO: `0x290770c85B42c3a32365f6f6350587878dCbe2D5`
+- ImpactNFT: `0x17CcdcF683626B5c914640154464bF64Ca66DB18`

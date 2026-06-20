@@ -66,6 +66,10 @@ contract TranspaChainTest is Test {
     address random = address(0xBEEF);
 
     uint256 constant GOAL = 2 ether;
+
+    function _grossForNet(uint256 netGoal) internal pure returns (uint256) {
+        return (netGoal * 10_000 + 9899) / 9900;
+    }
     uint256 constant DEADLINE_OFFSET = 30 days;
     uint8 constant MILESTONES = 3;
 
@@ -188,8 +192,13 @@ contract TranspaChainTest is Test {
         vault.donate{value: 0.5 ether}(id);
 
         vm.prank(org);
-        vm.expectRevert("CharityCore: has donors");
         core.cancelCampaign(id);
+
+        ICharityCore.Campaign memory c = core.getCampaign(id);
+        assertEq(uint8(c.status), uint8(ICharityCore.CampaignStatus.Cancelled));
+
+        (bool eligible,,) = vault.canRefund(id, donor1);
+        assertTrue(eligible);
     }
 
     function test_AdminCancelCampaign() public {
@@ -217,12 +226,8 @@ contract TranspaChainTest is Test {
     function test_FinalizeCampaignSuccessful() public {
         uint256 id = _createCampaign();
 
-        // Donate enough to meet goal
         vm.prank(donor1);
-        vault.donate{value: GOAL * 2}(id);
-
-        // Warp past deadline
-        vm.warp(block.timestamp + DEADLINE_OFFSET + 1);
+        vault.donate{value: _grossForNet(GOAL)}(id);
 
         core.finalizeCampaign(id);
 
@@ -231,6 +236,46 @@ contract TranspaChainTest is Test {
             uint8(c.status),
             uint8(ICharityCore.CampaignStatus.Successful)
         );
+    }
+
+    function test_FinalizeCampaignSuccessful_atGoalBeforeDeadline() public {
+        uint256 id = _createCampaign();
+
+        vm.prank(donor1);
+        vault.donate{value: _grossForNet(GOAL)}(id);
+
+        (bool eligible, bool goalReached, bool expired) = core.canFinalize(id);
+        assertTrue(eligible);
+        assertTrue(goalReached);
+        assertFalse(expired);
+
+        vm.prank(org);
+        core.finalizeCampaign(id);
+        assertEq(
+            uint8(core.getCampaign(id).status),
+            uint8(ICharityCore.CampaignStatus.Successful)
+        );
+    }
+
+    function testRevert_FinalizeCampaignBeforeGoalAndDeadline() public {
+        uint256 id = _createCampaign();
+
+        vm.prank(donor1);
+        vault.donate{value: GOAL / 2}(id);
+
+        vm.expectRevert("CharityCore: cannot finalize");
+        core.finalizeCampaign(id);
+    }
+
+    function testRevert_DonateAfterGoalReached() public {
+        uint256 id = _createCampaign();
+
+        vm.prank(donor1);
+        vault.donate{value: _grossForNet(GOAL)}(id);
+
+        vm.prank(donor2);
+        vm.expectRevert("Vault: goal reached");
+        vault.donate{value: 0.1 ether}(id);
     }
 
     function test_ExtendDeadline() public {
@@ -681,7 +726,7 @@ contract TranspaChainTest is Test {
     function test_GovernanceQuorumNotMet() public {
         uint256 id = _createCampaign();
 
-        // Two donors, only donor1 votes (less than 51% quorum)
+        // Two donors; For/Against split → defeated
         vm.prank(donor1);
         vault.donate{value: 1 ether}(id);
         vm.prank(donor2);
@@ -693,9 +738,10 @@ contract TranspaChainTest is Test {
         DonationVault.Milestone memory m = vault.getMilestone(id, 0);
         uint256 proposalId = m.proposalId;
 
-        // Only donor1 votes For (50% — below 51% quorum)
         vm.prank(donor1);
         dao.castVote(proposalId, IGovernanceDAO.VoteChoice.For);
+        vm.prank(donor2);
+        dao.castVote(proposalId, IGovernanceDAO.VoteChoice.Against);
 
         vm.roll(block.number + 21601);
 

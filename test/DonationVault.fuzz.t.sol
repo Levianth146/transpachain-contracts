@@ -159,6 +159,7 @@ contract DonationVaultFuzz is Test {
     /// @dev Multiple random donations accumulate correctly in escrow
     function testFuzz_donate_escrowAccumulates(uint96 a1, uint96 a2) public {
         vm.assume(a1 >= 0.001 ether && a2 >= 0.001 ether);
+        vm.assume(a1 <= 40 ether && a2 <= 40 ether);
         uint256 cid = _createCampaignETH();
 
         address d1 = makeAddr("d1");
