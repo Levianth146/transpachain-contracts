@@ -7,14 +7,12 @@
     "@nomicfoundation/hardhat-toolbox": "^5.0.0",
     "dotenv": "^16.0.0",
     "hardhat": "^2.22.0",
-    "typescript": "^5.4.5"
-  },
-  "dependencies": {
-    "@openzeppelin/contracts": "^5.6.1"
-  },
-  "optionalDependencies": {
+    "typescript": "^5.4.5",
     "@pinata/sdk": "^2.1.0",
     "axios": "^1.7.0",
     "form-data": "^4.0.0"
+  },
+  "dependencies": {
+    "@openzeppelin/contracts": "^5.6.1"
   }
 }
