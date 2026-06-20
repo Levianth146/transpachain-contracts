@@ -462,4 +462,53 @@ contract ImpactNFTTest is Test {
         );
         assertEq(tokenId, 1);
     }
+
+    // ─────────────────────────────────────────────
+    // setTierMetadataCID + refreshTokenURI
+    // ─────────────────────────────────────────────
+
+    function test_mint_prefersTierCIDOverFallback() public {
+        vm.prank(owner);
+        nft.setTierMetadataCID(IImpactNFT.DonorTier.Bronze, "QmBronzeTier");
+
+        uint256 tokenId = _mintNFT(donor1, 1, 0.01 ether, 0);
+
+        assertEq(nft.tokenURI(tokenId), "ipfs://QmBronzeTier");
+        assertEq(nft.getNFTMetadata(tokenId).metadataCID, "QmBronzeTier");
+    }
+
+    function test_mint_noURIWhenTierUnsetAndEmptyFallback() public {
+        vm.prank(vault);
+        uint256 tokenId = nft.mintImpactNFT(
+            donor1,
+            1,
+            IImpactNFT.DonorTier.Bronze,
+            0.01 ether,
+            "",
+            0
+        );
+
+        assertEq(bytes(nft.tokenURI(tokenId)).length, 0);
+    }
+
+    function test_refreshTokenURI_updatesFromTierMapping() public {
+        uint256 tokenId = _mintNFT(donor1, 1, 0.01 ether, 0);
+
+        vm.prank(owner);
+        nft.setTierMetadataCID(IImpactNFT.DonorTier.Bronze, "QmBronzeTier");
+
+        vm.prank(owner);
+        nft.refreshTokenURI(tokenId);
+
+        assertEq(nft.tokenURI(tokenId), "ipfs://QmBronzeTier");
+        assertEq(nft.getNFTMetadata(tokenId).metadataCID, "QmBronzeTier");
+    }
+
+    function test_refreshTokenURI_revertsIfTierUnset() public {
+        uint256 tokenId = _mintNFT(donor1, 1, 0.01 ether, 0);
+
+        vm.prank(owner);
+        vm.expectRevert("NFT: tier CID not set");
+        nft.refreshTokenURI(tokenId);
+    }
 }

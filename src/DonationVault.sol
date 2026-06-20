@@ -98,7 +98,7 @@ contract DonationVault is IDonationVault, ReentrancyGuard, Ownable {
         _recordDonor(campaignId, msg.sender, msg.value);
 
         if (first) {
-            impactNFT.mintImpactNFT(msg.sender, campaignId, _tier(msg.value), msg.value, c.metadataCID, uint8(ICharityCore.PaymentToken.ETH));
+            impactNFT.mintImpactNFT(msg.sender, campaignId, _tier(msg.value), msg.value, "", uint8(ICharityCore.PaymentToken.ETH));
         } else {
             _syncDonorNFT(msg.sender, campaignId, netAmount);
         }
@@ -134,7 +134,7 @@ contract DonationVault is IDonationVault, ReentrancyGuard, Ownable {
         _recordDonor(campaignId, msg.sender, amount);
 
         if (first) {
-            impactNFT.mintImpactNFT(msg.sender, campaignId, _tier(amount), amount, c.metadataCID, uint8(ICharityCore.PaymentToken.USDC));
+            impactNFT.mintImpactNFT(msg.sender, campaignId, _tier(amount), amount, "", uint8(ICharityCore.PaymentToken.USDC));
         } else {
             _syncDonorNFT(msg.sender, campaignId, netAmount);
         }

@@ -60,6 +60,17 @@ contract ImpactNFT is IImpactNFT, ERC721URIStorage, Ownable {
         return _tierMetadataCID[tier];
     }
 
+    /// @notice Sync tokenURI from tier metadata (fixes badges minted before setTierMetadataCID)
+    function refreshTokenURI(uint256 tokenId) external onlyOwner {
+        require(_ownerOf(tokenId) != address(0), "NFT: nonexistence");
+        NFTMetadata storage data = _metadata[tokenId];
+        string memory tierCid = _tierMetadataCID[data.tier];
+        require(bytes(tierCid).length > 0, "NFT: tier CID not set");
+        data.metadataCID = tierCid;
+        _setTokenURI(tokenId, string.concat("ipfs://", tierCid));
+        emit NFTProgressUpdated(tokenId, tierCid, data.impactScore, data.campaignCompleted);
+    }
+
     function _uriForTier(DonorTier tier, string calldata fallbackCID) internal view returns (string memory) {
         string memory tierCid = _tierMetadataCID[tier];
         if (bytes(tierCid).length > 0) return string.concat("ipfs://", tierCid);

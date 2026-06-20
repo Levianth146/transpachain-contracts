@@ -5,14 +5,18 @@
  * `https://gateway.pinata.cloud/ipfs/<imageCid>` in each metadata JSON.
  *
  * Usage (from transpachain-contracts root):
- *   PINATA_API_KEY=... PINATA_SECRET_KEY=... \
+ *   source .env   # or export vars manually
  *   IMPACT_NFT_ADDRESS=0xD651d3531a44ee7941bFE257c79F41d274E180A6 \
- *   PRIVATE_KEY=... SEPOLIA_RPC_URL=... \
  *   npx ts-node hardhat/scripts/setTierMetadata.ts
  *
- * Skip pinning if CIDs already known:
- *   BRONZE_CID=... SILVER_CID=... GOLD_CID=... \
+ * Skip pinning if CIDs already known (e.g. reuse from previous deploy):
+ *   BRONZE_CID=QmRdCrwKKam2GLjojmEHC5D4G7WtA3DRXTLZ4uXicgJC1g \
+ *   SILVER_CID=QmTZeB6tS3MUDd2WWyfJPU3qBEfhioE1AkvQZ25HmZnWKD \
+ *   GOLD_CID=Qma2kvdRAr7E3nQYeUWDms19Lygoikvw6QbTveUk2kqqgG \
  *   npx ts-node hardhat/scripts/setTierMetadata.ts --skip-pin
+ *
+ * After setting tier CIDs, repair badges minted with campaign metadata as tokenURI:
+ *   npx ts-node hardhat/scripts/setTierMetadata.ts --skip-pin --refresh-tokens
  *
  * After on-chain update:
  *   1. Refresh NFT in MetaMask (NFT tab → … → Refresh metadata)
@@ -28,6 +32,13 @@ import axios from "axios";
 const IMPACT_NFT_ABI = [
   "function setTierMetadataCID(uint8 tier, string calldata cid) external",
   "function getTierMetadataCID(uint8 tier) external view returns (string)",
+  "function refreshTokenURI(uint256 tokenId) external",
+  "function updateNFTProgress(uint256 tokenId, string calldata newCID, uint256 newScore, bool completed) external",
+  "function getNFTMetadata(uint256 tokenId) external view returns (tuple(uint256 campaignId, address donor, uint8 tier, uint256 donatedAmount, uint256 impactScore, bool campaignCompleted, string metadataCID, uint8 paymentToken))",
+  "function tokenURI(uint256 tokenId) external view returns (string)",
+  "function ownerOf(uint256 tokenId) external view returns (address)",
+  "function owner() external view returns (address)",
+  "event Transfer(address indexed from, address indexed to, uint256 indexed tokenId)",
 ];
 
 const GATEWAY = process.env.PINATA_GATEWAY || "https://gateway.pinata.cloud/ipfs";
@@ -144,15 +155,71 @@ async function pinTierBundle(
   return pinJsonToIPFS(pinata, metadata, `tc-impact-${spec.label.toLowerCase()}`);
 }
 
+async function discoverTokenIds(nft: ethers.Contract): Promise<number[]> {
+  const ids: number[] = [];
+  for (let tokenId = 1; tokenId <= 512; tokenId++) {
+    try {
+      await nft.ownerOf(tokenId);
+      ids.push(tokenId);
+    } catch {
+      break;
+    }
+  }
+  return ids;
+}
+
+async function refreshExistingTokens(
+  nft: ethers.Contract,
+  wallet: ethers.Wallet,
+  cids: Record<string, string>
+) {
+  const tokenIds = await discoverTokenIds(nft);
+  if (tokenIds.length === 0) {
+    console.log("No minted tokens to refresh.");
+    return;
+  }
+
+  console.log(`\nRefreshing tokenURI for ${tokenIds.length} token(s): ${tokenIds.join(", ")}`);
+
+  const nftWithSigner = nft.connect(wallet) as ethers.Contract;
+
+  for (const tokenId of tokenIds) {
+    const meta = await nft.getNFTMetadata(tokenId);
+    const tierIdx = Number(meta.tier);
+    const tierLabel = TIER_META[tierIdx]?.label ?? "Bronze";
+    const tierCid = cids[tierLabel];
+    const currentUri = await nft.tokenURI(tokenId);
+    const expectedUri = `ipfs://${tierCid}`;
+
+    if (currentUri === expectedUri) {
+      console.log(`  token #${tokenId}: already ${expectedUri}`);
+      continue;
+    }
+
+    // Owner is trusted; updateNFTProgress works on all deployed ImpactNFT versions
+    const tx = await nftWithSigner.updateNFTProgress(
+      tokenId,
+      tierCid,
+      meta.impactScore,
+      meta.campaignCompleted
+    );
+    console.log(`  token #${tokenId}: updateNFTProgress(${tierLabel}) tx ${tx.hash}`);
+    await tx.wait();
+  }
+}
+
 async function main() {
   const skipPin = process.argv.includes("--skip-pin");
-  const rpc = process.env.SEPOLIA_RPC_URL || process.env.ALCHEMY_SEPOLIA_URL;
-  const pk = process.env.PRIVATE_KEY;
+  const refreshTokens = process.argv.includes("--refresh-tokens");
+  const rpc =
+    process.env.SEPOLIA_RPC_URL ||
+    process.env.ALCHEMY_SEPOLIA_URL;
+  const pk = process.env.PRIVATE_KEY || process.env.DEPLOYER_PRIVATE_KEY;
   const nftAddress =
     process.env.IMPACT_NFT_ADDRESS || "0xD651d3531a44ee7941bFE257c79F41d274E180A6";
 
   if (!rpc || !pk) {
-    throw new Error("Set SEPOLIA_RPC_URL (or ALCHEMY_SEPOLIA_URL) and PRIVATE_KEY");
+    throw new Error("Set SEPOLIA_RPC_URL (or ALCHEMY_SEPOLIA_URL) and PRIVATE_KEY or DEPLOYER_PRIVATE_KEY");
   }
 
   const metaDir = path.join(__dirname, "../../metadata");
@@ -181,6 +248,11 @@ async function main() {
   const wallet = new ethers.Wallet(pk, provider);
   const nft = new ethers.Contract(nftAddress, IMPACT_NFT_ABI, wallet);
 
+  const onChainOwner = await nft.owner();
+  if (onChainOwner.toLowerCase() !== wallet.address.toLowerCase()) {
+    throw new Error(`Wallet ${wallet.address} is not ImpactNFT owner (${onChainOwner})`);
+  }
+
   for (const spec of TIER_META) {
     const cid = cids[spec.label];
     const existing = await nft.getTierMetadataCID(spec.tier);
@@ -193,6 +265,10 @@ async function main() {
     await tx.wait();
   }
 
+  if (refreshTokens) {
+    await refreshExistingTokens(nft, wallet, cids);
+  }
+
   console.log("\n✓ Tier metadata CIDs set on ImpactNFT:", nftAddress);
   console.log("  Bronze:", cids.Bronze);
   console.log("  Silver:", cids.Silver);
@@ -202,6 +278,9 @@ async function main() {
   console.log("Bronze metadata JSON: " + `${GATEWAY}/${cids.Bronze}`);
   console.log("Silver metadata JSON: " + `${GATEWAY}/${cids.Silver}`);
   console.log("Gold metadata JSON: " + `${GATEWAY}/${cids.Gold}`);
+  if (!refreshTokens) {
+    console.log("\nTip: add --refresh-tokens to repair badges minted before tier CIDs were set.");
+  }
 }
 
 main().catch((e) => {

@@ -124,4 +124,7 @@ interface IImpactNFT {
     function setTierMetadataCID(DonorTier tier, string calldata cid) external;
 
     function getTierMetadataCID(DonorTier tier) external view returns (string memory);
+
+    /// @notice Owner-only: point tokenURI at the tier metadata CID (post setTierMetadataCID)
+    function refreshTokenURI(uint256 tokenId) external;
 }

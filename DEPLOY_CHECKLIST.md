@@ -43,6 +43,34 @@ Save printed addresses — update **all** of:
 4. `dao.setVerifier(verifierWallet)` — same as CharityCore VERIFIER_ROLE holder
 5. Verify org wallets: `core.verifyOrg(orgAddress)`
 
+## Post-deploy: Impact NFT tier metadata (required for MetaMask / Etherscan)
+
+The site dashboard renders badges from local SVGs + on-chain `tier`; wallets read `tokenURI` → IPFS JSON with an `image` field.
+
+**Without this step**, minted badges point at **campaign** metadata (`imageUrl`, not ERC-721 `image`) and MetaMask shows a broken image.
+
+```bash
+cd /root/projects/transpachain-contracts
+# From .env: ALCHEMY_SEPOLIA_URL, DEPLOYER_PRIVATE_KEY, PINATA_* , IMPACT_NFT_ADDRESS
+
+# First deploy — pin SVGs + JSON to Pinata, set tier CIDs on-chain:
+npx ts-node hardhat/scripts/setTierMetadata.ts
+
+# Reuse existing Pinata CIDs (faster, same art as previous deploy):
+BRONZE_CID=QmRdCrwKKam2GLjojmEHC5D4G7WtA3DRXTLZ4uXicgJC1g \
+SILVER_CID=QmTZeB6tS3MUDd2WWyfJPU3qBEfhioE1AkvQZ25HmZnWKD \
+GOLD_CID=Qma2kvdRAr7E3nQYeUWDms19Lygoikvw6QbTveUk2kqqgG \
+IMPACT_NFT_ADDRESS=0xD651d3531a44ee7941bFE257c79F41d274E180A6 \
+npx ts-node hardhat/scripts/setTierMetadata.ts --skip-pin
+
+# Repair badges minted before tier CIDs were set (e.g. tokens #1–#4):
+npx ts-node hardhat/scripts/setTierMetadata.ts --skip-pin --refresh-tokens
+```
+
+After running, tell users: MetaMask → NFT → **⋯ → Refresh metadata**.
+
+Verify Bronze JSON: `https://gateway.pinata.cloud/ipfs/<BRONZE_CID>` must include `"image": "https://..."`.
+
 ## EC2 / production restart
 
 ```bash
@@ -60,6 +88,8 @@ pm2 restart transpachain-backend   # or your process manager
 - [ ] Single voter For passes quorum (among voters, not all donors)
 - [ ] Defeated milestone → org can submit new proof CID
 - [ ] Frontend Finalize disabled until `canFinalize` true; clear error messages
+- [ ] `setTierMetadata.ts` run for new `IMPACT_NFT_ADDRESS`; `--refresh-tokens` if badges minted before
+- [ ] MetaMask shows badge image after **Refresh metadata**
 
 ## Current Sepolia
 
