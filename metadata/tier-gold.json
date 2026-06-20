@@ -1,10 +1,11 @@
 {
   "name": "TranspaChain Impact — Gold",
-  "description": "Retro gold donor badge. Top tier for major TranspaChain campaign contributors.",
-  "image": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI1MTIiIGhlaWdodD0iNTEyIiB2aWV3Qm94PSIwIDAgNTEyIDUxMiI+PHN0eWxlPi5waXhlbntpbWFnZS1yZW5kZXJpbmc6cGl4ZWwtYXR0O319PC9zdHlsZT48cmVjdCB3aWR0aD0iNTEyIiBoZWlnaHQ9IjUxMiIgZmlsbD0iIzBmMTExNSIvPjxyZWN0IHdpZHRoPSI1MTIiIGhlaWdodD0iNTEyIiBmaWxsPSJ1cmwoI2cpIG9wYWNpdHk9Ii41NSIvPjxkZWZzPjxsaW5lYXJHcmFkaWVudCBpZD0iZyIgeDE9IjAlIiB5MT0iMCUiIHgyPSIxMDAlIiB5Mj0iMTAwJSI+PHN0b3Agb2Zmc2V0PSIwJSIgc3RvcC1jb2xvcj0iI2ZmZDcwMCIvPjxzdG9wIG9mZnNldD0iNTAlIiBzdG9wLWNvbG9yPSIjZmZmMDAwIi8+PHN0b3Agb2Zmc2V0PSIxMDAlIiBzdG9wLWNvbG9yPSIjZmY5OTAwIi8+PC9saW5lYXJHcmFkaWVudD48L2RlZnM+PHJlY3QgY2xhc3M9InBpeGVsIiB4PSI2NCIgeT0iNjQiIHdpZHRoPSIzODQiIGhlaWdodD0iMzg0IiBmaWxsPSIjZmZkNzAwIiByeD0iMTYiIHN0cm9rZT0iIzAwZmZmZiIgc3Ryb2tlLXdpZHRoPSI4Ii8+PHRleHQgeD0iMjU2IiB5PSIyNDAiIGZvbnQtZmFtaWx5PSJtb25vc3BhY2UiIGZvbnQtc2l6ZT0iNDgiIGZpbGw9IiMwMDAwMDAiIHRleHQtYW5jaG9yPSJtaWRkbGUiPkdPTEQ8L3RleHQ+PHRleHQgeD0iMjU2IiB5PSIzMDAiIGZvbnQtZmFtaWx5PSJtb25vc3BhY2UiIGZvbnQtc2l6ZT0iMjQiIGZpbGw9IiNmZmZmZmYiIHRleHQtYW5jaG9yPSJtaWRkbGUiPklNUEFDVCBORlQ8L3RleHQ+PHRleHQgeD0iMjU2IiB5PSIzNjAiIGZvbnQtZmFtaWx5PSJtb25vc3BhY2UiIGZvbnQtc2l6ZT0iMTgiIGZpbGw9IiMwMGZmZmYiIHRleHQtYW5jaG9yPSJtaWRkbGUiPlNlcG9saWEgVGVzdG5ldDwvdGV4dD48L3N2Zz4=",
+  "description": "Retro synthwave gold donor badge. Top-tier impact recognition on Sepolia.",
+  "image": "https://gateway.pinata.cloud/ipfs/<IMAGE_CID_SET_BY_SCRIPT>",
+  "external_url": "https://transpachain.site",
   "attributes": [
     { "trait_type": "Tier", "value": "Gold" },
-    { "trait_type": "Style", "value": "Retro Pixel" },
+    { "trait_type": "Style", "value": "Retro Synthwave" },
     { "trait_type": "Network", "value": "Sepolia" }
   ]
 }

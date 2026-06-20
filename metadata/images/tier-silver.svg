@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <defs>
+    <linearGradient id="sky" x1="256" y1="0" x2="256" y2="512">
+      <stop offset="0%" stop-color="#020818"/>
+      <stop offset="50%" stop-color="#0a1628"/>
+      <stop offset="100%" stop-color="#1a2744"/>
+    </linearGradient>
+    <linearGradient id="moon" x1="380" y1="60" x2="440" y2="120">
+      <stop offset="0%" stop-color="#e2e8f0"/>
+      <stop offset="100%" stop-color="#94a3b8"/>
+    </linearGradient>
+    <linearGradient id="silver" x1="156" y1="120" x2="356" y2="380">
+      <stop offset="0%" stop-color="#f8fafc"/>
+      <stop offset="30%" stop-color="#cbd5e1"/>
+      <stop offset="60%" stop-color="#64748b"/>
+      <stop offset="100%" stop-color="#334155"/>
+    </linearGradient>
+    <linearGradient id="frame" x1="96" y1="96" x2="416" y2="416">
+      <stop offset="0%" stop-color="#67e8f9"/>
+      <stop offset="100%" stop-color="#64748b"/>
+    </linearGradient>
+    <linearGradient id="neon" x1="0" y1="400" x2="512" y2="512">
+      <stop offset="0%" stop-color="#06b6d4" stop-opacity="0"/>
+      <stop offset="100%" stop-color="#06b6d4" stop-opacity="0.4"/>
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="5" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <pattern id="grid" width="32" height="32" patternUnits="userSpaceOnUse">
+      <path d="M32 0 L0 0 0 32" fill="none" stroke="#06b6d4" stroke-width="0.5" opacity="0.4"/>
+    </pattern>
+    <pattern id="scan" width="4" height="4" patternUnits="userSpaceOnUse">
+      <rect width="4" height="2" fill="#000" opacity="0.1"/>
+    </pattern>
+  </defs>
+  <rect width="512" height="512" fill="url(#sky)"/>
+  <circle cx="400" cy="90" r="36" fill="url(#moon)" filter="url(#glow)"/>
+  <rect x="0" y="320" width="512" height="192" fill="url(#grid)" opacity="0.7"/>
+  <path d="M0 360 L512 360 M0 380 L512 380 M0 400 L512 400 M0 420 L512 420 M0 440 L512 440" stroke="#06b6d4" stroke-width="1" opacity="0.3"/>
+  <rect x="0" y="380" width="512" height="132" fill="url(#neon)"/>
+  <g opacity="0.9">
+    <rect x="48" y="56" width="3" height="3" fill="#67e8f9"/>
+    <rect x="460" y="80" width="2" height="2" fill="#fff"/>
+    <rect x="120" y="90" width="2" height="2" fill="#cbd5e1"/>
+    <rect x="380" y="140" width="3" height="3" fill="#67e8f9"/>
+  </g>
+  <rect x="56" y="56" width="400" height="400" rx="24" fill="none" stroke="url(#frame)" stroke-width="6" filter="url(#glow)"/>
+  <rect x="72" y="72" width="368" height="368" rx="16" fill="#050d18" opacity="0.9"/>
+  <polygon points="256,100 360,180 360,300 256,380 152,300 152,180" fill="url(#silver)" stroke="#e2e8f0" stroke-width="4"/>
+  <polygon points="256,140 320,190 320,270 256,320 192,270 192,190" fill="#0a1628" opacity="0.6"/>
+  <rect x="248" y="200" width="16" height="48" fill="#f8fafc"/>
+  <rect x="232" y="216" width="48" height="16" fill="#f8fafc"/>
+  <rect x="200" y="288" width="112" height="16" fill="#64748b"/>
+  <rect x="208" y="292" width="8" height="8" fill="#e2e8f0"/>
+  <rect x="224" y="292" width="8" height="8" fill="#e2e8f0"/>
+  <rect x="240" y="292" width="8" height="8" fill="#e2e8f0"/>
+  <rect x="256" y="292" width="8" height="8" fill="#e2e8f0"/>
+  <rect x="272" y="292" width="8" height="8" fill="#e2e8f0"/>
+  <rect x="288" y="292" width="8" height="8" fill="#e2e8f0"/>
+  <rect x="304" y="292" width="8" height="8" fill="#e2e8f0"/>
+  <text x="256" y="340" text-anchor="middle" font-family="monospace" font-size="14" font-weight="bold" fill="#e2e8f0" letter-spacing="6">SILVER TIER</text>
+  <text x="256" y="368" text-anchor="middle" font-family="monospace" font-size="11" fill="#67e8f9" letter-spacing="3">TRANSPACHAIN IMPACT</text>
+  <rect x="0" y="0" width="512" height="512" fill="url(#scan)" pointer-events="none"/>
+</svg>

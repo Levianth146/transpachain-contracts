@@ -1,0 +1,63 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <defs>
+    <linearGradient id="sky" x1="256" y1="0" x2="256" y2="512">
+      <stop offset="0%" stop-color="#0f0520"/>
+      <stop offset="45%" stop-color="#1a0a3e"/>
+      <stop offset="100%" stop-color="#2d1b4e"/>
+    </linearGradient>
+    <linearGradient id="sun" x1="256" y1="280" x2="256" y2="512">
+      <stop offset="0%" stop-color="#ff6b35"/>
+      <stop offset="40%" stop-color="#f7931e"/>
+      <stop offset="100%" stop-color="#ffcc00"/>
+    </linearGradient>
+    <linearGradient id="bronze" x1="156" y1="120" x2="356" y2="380">
+      <stop offset="0%" stop-color="#ffd699"/>
+      <stop offset="35%" stop-color="#cd7f32"/>
+      <stop offset="70%" stop-color="#8b4513"/>
+      <stop offset="100%" stop-color="#5c3317"/>
+    </linearGradient>
+    <linearGradient id="frame" x1="96" y1="96" x2="416" y2="416">
+      <stop offset="0%" stop-color="#ffb347"/>
+      <stop offset="100%" stop-color="#8b4513"/>
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="4" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <pattern id="grid" width="32" height="32" patternUnits="userSpaceOnUse">
+      <path d="M32 0 L0 0 0 32" fill="none" stroke="#ff6b35" stroke-width="0.5" opacity="0.35"/>
+    </pattern>
+    <pattern id="scan" width="4" height="4" patternUnits="userSpaceOnUse">
+      <rect width="4" height="2" fill="#000" opacity="0.12"/>
+    </pattern>
+  </defs>
+  <rect width="512" height="512" fill="url(#sky)"/>
+  <ellipse cx="256" cy="420" rx="220" ry="90" fill="url(#sun)" opacity="0.9"/>
+  <rect x="0" y="340" width="512" height="172" fill="url(#grid)" opacity="0.6"/>
+  <path d="M0 380 L512 380 M0 400 L512 400 M0 420 L512 420 M0 440 L512 440 M0 460 L512 460" stroke="#ff6b35" stroke-width="1" opacity="0.25"/>
+  <g opacity="0.8">
+    <rect x="40" y="48" width="4" height="4" fill="#ffd699"/>
+    <rect x="468" y="72" width="3" height="3" fill="#ff6b35"/>
+    <rect x="80" y="100" width="2" height="2" fill="#fff"/>
+    <rect x="420" y="120" width="3" height="3" fill="#ffd699"/>
+    <rect x="200" y="60" width="2" height="2" fill="#ffcc00"/>
+  </g>
+  <rect x="56" y="56" width="400" height="400" rx="24" fill="none" stroke="url(#frame)" stroke-width="6" filter="url(#glow)"/>
+  <rect x="72" y="72" width="368" height="368" rx="16" fill="#0a0618" opacity="0.85"/>
+  <polygon points="256,108 340,148 340,228 256,268 172,228 172,148" fill="url(#bronze)" stroke="#ffd699" stroke-width="4"/>
+  <rect x="236" y="158" width="40" height="40" fill="#1a0a3e" opacity="0.5"/>
+  <rect x="244" y="166" width="8" height="24" fill="#fff8e7"/>
+  <rect x="260" y="166" width="8" height="24" fill="#fff8e7"/>
+  <rect x="244" y="182" width="24" height="8" fill="#fff8e7"/>
+  <rect x="200" y="288" width="112" height="16" fill="#cd7f32"/>
+  <rect x="208" y="292" width="8" height="8" fill="#ffd699"/>
+  <rect x="224" y="292" width="8" height="8" fill="#ffd699"/>
+  <rect x="240" y="292" width="8" height="8" fill="#ffd699"/>
+  <rect x="256" y="292" width="8" height="8" fill="#ffd699"/>
+  <rect x="272" y="292" width="8" height="8" fill="#ffd699"/>
+  <rect x="288" y="292" width="8" height="8" fill="#ffd699"/>
+  <rect x="304" y="292" width="8" height="8" fill="#ffd699"/>
+  <text x="256" y="340" text-anchor="middle" font-family="monospace" font-size="14" font-weight="bold" fill="#ffd699" letter-spacing="6">BRONZE TIER</text>
+  <text x="256" y="368" text-anchor="middle" font-family="monospace" font-size="11" fill="#ff6b35" letter-spacing="3">TRANSPACHAIN IMPACT</text>
+  <rect x="0" y="0" width="512" height="512" fill="url(#scan)" pointer-events="none"/>
+</svg>
