@@ -198,7 +198,10 @@ async function main() {
   console.log("  Silver:", cids.Silver);
   console.log("  Gold:", cids.Gold);
   console.log("\nMetaMask: open NFT → ⋯ → Refresh metadata");
-  console.log("OpenSea Sepolia: https://testnets.opensea.io/assets/sepolia/" + nftAddress);
+  console.log("Etherscan (ImpactNFT): https://sepolia.etherscan.io/token/" + nftAddress);
+  console.log("Bronze metadata JSON: " + `${GATEWAY}/${cids.Bronze}`);
+  console.log("Silver metadata JSON: " + `${GATEWAY}/${cids.Silver}`);
+  console.log("Gold metadata JSON: " + `${GATEWAY}/${cids.Gold}`);
 }
 
 main().catch((e) => {
