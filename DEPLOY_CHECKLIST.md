@@ -93,13 +93,21 @@ pm2 restart transpachain-backend   # or your process manager
 
 ## Current Sepolia
 
+- CharityCore: `0xCE017838BfE2785CB2458bb205770663bEB9b0B8`
+- DonationVault: `0xEb421D07E885EeB2B8E9ea408FF284013F872Db1`
+- GovernanceDAO: `0xd655d85ddACc386901487CE8E1ec45BD4F872A19`
+- ImpactNFT: `0xF2556FcccaE36A6d8Da0C75a863CA7368FC6761a`
+- Deploy block: `11146320` (`DEPLOY_FROM_BLOCK`)
+
+## Previous Sepolia (deprecated — v2 lifecycle fix)
+
 - CharityCore: `0x8a5e023b16ab13939260492dAe72a0be1E597e1a`
 - DonationVault: `0x68Bb9f5E1414b1a62372EbF02fdEe4c09fFc7C32`
 - GovernanceDAO: `0xCcAEaF248E536850877B9f948cB237Fe7885b513`
 - ImpactNFT: `0xD651d3531a44ee7941bFE257c79F41d274E180A6`
-- Deploy block: `11102718` (`DEPLOY_FROM_BLOCK`)
+- Deploy block: `11102718`
 
-## Previous Sepolia (deprecated)
+## Previous Sepolia (deprecated — v1)
 
 - CharityCore: `0xA13344e56a2421322bb2985ffE37b07DB80B760d`
 - DonationVault: `0x72116A0BCe20473FE1BfcC2da9D2337A6D39Ed5c`
