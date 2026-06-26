@@ -13,6 +13,8 @@ import { TranspaChainErrors } from "./Errors.sol";
 
 /// @title DonationVault
 /// @notice ETH/USDC escrow with milestone-based release and pull-pattern refunds
+/// @dev Financial state (raised, escrow, donorBalance, refunds, voting power) uses netAmount.
+///      NFT tiers may use grossAmount for donor recognition.
 contract DonationVault is IDonationVault, ReentrancyGuard, Ownable {
     using SafeERC20 for IERC20;
 
@@ -43,7 +45,8 @@ contract DonationVault is IDonationVault, ReentrancyGuard, Ownable {
     mapping(uint256 => uint256)                     private _escrowBalances;
     mapping(uint256 => mapping(uint8 => Milestone)) private _milestones;
     uint256 private _totalEscrow;
-    mapping(uint256 => uint256) private _totalDeposited; // campaignId => total deposited (before any release)
+  mapping(uint256 => uint256) private _totalDeposited;
+    mapping(uint256 => uint256) private _remainingRefundWeight;
 
     mapping(uint256 => mapping(address => DonorInfo)) private _donorInfo;
     mapping(uint256 => address[])                     private _donorList;
@@ -78,6 +81,7 @@ contract DonationVault is IDonationVault, ReentrancyGuard, Ownable {
         require(block.timestamp < c.deadline, "Vault: expired");
         require(c.raisedAmount < c.goalAmount, "Vault: goal reached");
         require(c.paymentToken == ICharityCore.PaymentToken.ETH, "Vault: not ETH campaign");
+        require(!governanceDAO.hasActiveOrQueuedProposal(campaignId), "Vault: proposal active");
 
         bool first        = _donorBalances[campaignId][msg.sender] == 0;
         uint256 fee       = (msg.value * platformFeeBps) / 10_000;
@@ -86,6 +90,8 @@ contract DonationVault is IDonationVault, ReentrancyGuard, Ownable {
         _donorBalances[campaignId][msg.sender] += netAmount;
         _escrowBalances[campaignId]            += netAmount;
         _totalEscrow                           += netAmount;
+        _totalDeposited[campaignId]            += netAmount;
+        _remainingRefundWeight[campaignId]     += netAmount;
 
         if (fee > 0 && treasury != address(0)) {
             (bool ok,) = treasury.call{value: fee}("");
@@ -94,16 +100,29 @@ contract DonationVault is IDonationVault, ReentrancyGuard, Ownable {
         }
 
         charityCore.addRaisedAmount(campaignId, netAmount);
-        _totalDeposited[campaignId] += netAmount;
         _recordDonor(campaignId, msg.sender, msg.value);
 
         if (first) {
-            impactNFT.mintImpactNFT(msg.sender, campaignId, _tier(msg.value), msg.value, "", uint8(ICharityCore.PaymentToken.ETH));
+            impactNFT.mintImpactNFT(
+                msg.sender,
+                campaignId,
+                _tierETH(msg.value),
+                msg.value,
+                "",
+                uint8(ICharityCore.PaymentToken.ETH)
+            );
         } else {
             _syncDonorNFT(msg.sender, campaignId, netAmount);
         }
 
-        emit DonationReceived(campaignId, msg.sender, msg.value, uint8(ICharityCore.PaymentToken.ETH));
+        emit DonationReceived(
+            campaignId,
+            msg.sender,
+            msg.value,
+            netAmount,
+            fee,
+            uint8(ICharityCore.PaymentToken.ETH)
+        );
     }
 
     function donateUSDC(uint256 campaignId, uint256 amount) external nonReentrant {
@@ -113,6 +132,7 @@ contract DonationVault is IDonationVault, ReentrancyGuard, Ownable {
         require(block.timestamp < c.deadline, "Vault: expired");
         require(c.raisedAmount < c.goalAmount, "Vault: goal reached");
         require(c.paymentToken == ICharityCore.PaymentToken.USDC, "Vault: not USDC campaign");
+        require(!governanceDAO.hasActiveOrQueuedProposal(campaignId), "Vault: proposal active");
 
         bool first        = _donorBalances[campaignId][msg.sender] == 0;
         uint256 fee       = (amount * platformFeeBps) / 10_000;
@@ -128,27 +148,46 @@ contract DonationVault is IDonationVault, ReentrancyGuard, Ownable {
         _donorBalances[campaignId][msg.sender] += netAmount;
         _escrowBalances[campaignId]            += netAmount;
         _totalEscrow                           += netAmount;
+        _totalDeposited[campaignId]            += netAmount;
+        _remainingRefundWeight[campaignId]     += netAmount;
 
         charityCore.addRaisedAmount(campaignId, netAmount);
-        _totalDeposited[campaignId] += netAmount;
         _recordDonor(campaignId, msg.sender, amount);
 
         if (first) {
-            impactNFT.mintImpactNFT(msg.sender, campaignId, _tier(amount), amount, "", uint8(ICharityCore.PaymentToken.USDC));
+            impactNFT.mintImpactNFT(
+                msg.sender,
+                campaignId,
+                _tierUSDC(amount),
+                amount,
+                "",
+                uint8(ICharityCore.PaymentToken.USDC)
+            );
         } else {
             _syncDonorNFT(msg.sender, campaignId, netAmount);
         }
 
-        emit DonationReceived(campaignId, msg.sender, amount, uint8(ICharityCore.PaymentToken.USDC));
+        emit DonationReceived(
+            campaignId,
+            msg.sender,
+            amount,
+            netAmount,
+            fee,
+            uint8(ICharityCore.PaymentToken.USDC)
+        );
     }
 
     function submitMilestoneProof(uint256 campaignId, uint8 idx, string calldata proofCID)
-        external nonReentrant
+        external
+        nonReentrant
     {
         ICharityCore.Campaign memory c = charityCore.getCampaign(campaignId);
         require(msg.sender == c.orgAddress, "Vault: not org");
         require(c.status == ICharityCore.CampaignStatus.Active, "Vault: not active");
         require(bytes(proofCID).length > 0, "Vault: empty proof");
+        require(idx < c.totalMilestones, "Vault: invalid milestone");
+        require(idx == c.completedMilestones, "Vault: wrong order");
+        require(_escrowBalances[campaignId] > 0, "Vault: empty escrow");
 
         Milestone storage m = _milestones[campaignId][idx];
         require(!m.released, "Vault: already released");
@@ -169,64 +208,72 @@ contract DonationVault is IDonationVault, ReentrancyGuard, Ownable {
         emit MilestoneProofSubmitted(campaignId, idx, proofCID, m.proposalId);
     }
 
-    function releaseMilestoneFunds(uint256 campaignId, uint8 idx)
-        external nonReentrant onlyGovernanceDAO
+    function releaseMilestoneFunds(uint256 campaignId, uint8 idx, uint256 proposalId)
+        external
+        nonReentrant
+        onlyGovernanceDAO
     {
+        ICharityCore.Campaign memory campaign = charityCore.getCampaign(campaignId);
+        require(campaign.status == ICharityCore.CampaignStatus.Active, "Vault: campaign not active");
+        require(idx < campaign.totalMilestones, "Vault: invalid milestone");
+
         Milestone storage m = _milestones[campaignId][idx];
-        require(!m.released && m.releaseAmount > 0, "Vault: invalid");
-        require(_escrowBalances[campaignId] >= m.releaseAmount, "Vault: insufficient");
+        require(m.proposalId == proposalId, "Vault: wrong proposal");
+        require(!m.released, "Vault: already released");
+        require(idx == campaign.completedMilestones, "Vault: wrong order");
+        require(bytes(m.proofCID).length > 0, "Vault: no proof");
+
+        uint256 releaseAmount = m.releaseAmount;
+        require(releaseAmount > 0, "Vault: zero release");
+        require(_escrowBalances[campaignId] >= releaseAmount, "Vault: insufficient");
 
         m.released = true;
-        _escrowBalances[campaignId] -= m.releaseAmount;
-        _totalEscrow                -= m.releaseAmount;
+        _escrowBalances[campaignId] -= releaseAmount;
+        _totalEscrow                -= releaseAmount;
         charityCore.incrementMilestone(campaignId);
 
-        ICharityCore.Campaign memory campaign = charityCore.getCampaign(campaignId);
         address org = campaign.orgAddress;
-
         if (campaign.paymentToken == ICharityCore.PaymentToken.USDC) {
-            usdcToken.safeTransfer(org, m.releaseAmount);
+            usdcToken.safeTransfer(org, releaseAmount);
         } else {
-            (bool ok,) = org.call{value: m.releaseAmount}("");
+            (bool ok,) = org.call{value: releaseAmount}("");
             require(ok, "Vault: transfer failed");
         }
-        emit FundsReleased(campaignId, idx, m.releaseAmount, org);
+        emit FundsReleased(campaignId, idx, releaseAmount, org);
     }
 
     function claimRefund(uint256 campaignId) external nonReentrant {
         ICharityCore.Campaign memory c = charityCore.getCampaign(campaignId);
         require(
             c.status == ICharityCore.CampaignStatus.Failed ||
-                c.status == ICharityCore.CampaignStatus.Cancelled ||
-                block.timestamp > c.deadline,
+                c.status == ICharityCore.CampaignStatus.Cancelled,
             "Vault: not refundable"
         );
-        uint256 amount = _donorBalances[campaignId][msg.sender];
-        require(amount > 0, "Vault: nothing to refund");
 
-        // Proportional refund if milestones were released
-        uint256 escrow = _escrowBalances[campaignId];
-        uint256 deposited = _totalDeposited[campaignId];
-        if (deposited > 0 && escrow < deposited) {
-            amount = (amount * escrow) / deposited;
-        }
-        require(amount > 0, "Vault: nothing to refund");
+        uint256 donorBalance = _donorBalances[campaignId][msg.sender];
+        require(donorBalance > 0, "Vault: nothing to refund");
+
+        uint256 refundAmount = _calculateRefundAmount(campaignId, msg.sender);
+        require(refundAmount > 0, "Vault: nothing to refund");
 
         _donorBalances[campaignId][msg.sender] = 0;
-        _escrowBalances[campaignId]            -= amount;
-        _totalEscrow                           -= amount;
+        _remainingRefundWeight[campaignId]      -= donorBalance;
+        _escrowBalances[campaignId]            -= refundAmount;
+        _totalEscrow                           -= refundAmount;
 
         if (c.paymentToken == ICharityCore.PaymentToken.USDC) {
-            usdcToken.safeTransfer(msg.sender, amount);
+            usdcToken.safeTransfer(msg.sender, refundAmount);
         } else {
-            (bool ok,) = msg.sender.call{value: amount}("");
+            (bool ok,) = msg.sender.call{value: refundAmount}("");
             require(ok, "Vault: refund failed");
         }
-        emit RefundProcessed(campaignId, msg.sender, amount);
+        emit RefundProcessed(campaignId, msg.sender, refundAmount);
     }
 
     function emergencyRefundBatch(uint256 campaignId, uint256 offset, uint256 limit)
-        external onlyOwner nonReentrant
+        external
+        onlyOwner
+        nonReentrant
     {
         ICharityCore.Campaign memory c = charityCore.getCampaign(campaignId);
         require(
@@ -243,23 +290,27 @@ contract DonationVault is IDonationVault, ReentrancyGuard, Ownable {
         uint256 totalRefunded;
 
         for (uint256 i = offset; i < end; i++) {
-            address donor  = donorList[i];
-            uint256 amount = _donorBalances[campaignId][donor];
-            if (amount == 0) continue;
+            address donor = donorList[i];
+            uint256 donorBalance = _donorBalances[campaignId][donor];
+            if (donorBalance == 0) continue;
+
+            uint256 refundAmount = _calculateRefundAmount(campaignId, donor);
+            if (refundAmount == 0) continue;
 
             _donorBalances[campaignId][donor] = 0;
-            _escrowBalances[campaignId]       -= amount;
-            _totalEscrow                      -= amount;
+            _remainingRefundWeight[campaignId] -= donorBalance;
+            _escrowBalances[campaignId]       -= refundAmount;
+            _totalEscrow                      -= refundAmount;
 
             if (c.paymentToken == ICharityCore.PaymentToken.USDC) {
-                usdcToken.safeTransfer(donor, amount);
+                usdcToken.safeTransfer(donor, refundAmount);
             } else {
-                (bool ok,) = donor.call{value: amount}("");
+                (bool ok,) = donor.call{value: refundAmount}("");
                 require(ok, "Vault: refund failed");
             }
-            emit RefundProcessed(campaignId, donor, amount);
+            emit RefundProcessed(campaignId, donor, refundAmount);
             count++;
-            totalRefunded += amount;
+            totalRefunded += refundAmount;
         }
         emit EmergencyRefundBatch(campaignId, count, totalRefunded);
     }
@@ -305,18 +356,66 @@ contract DonationVault is IDonationVault, ReentrancyGuard, Ownable {
         return _donorList[cid];
     }
 
+    function getTotalDeposited(uint256 campaignId) external view returns (uint256) {
+        return _totalDeposited[campaignId];
+    }
+
+    function getRefundableAmount(uint256 campaignId, address donor) external view returns (uint256) {
+        ICharityCore.Campaign memory c = charityCore.getCampaign(campaignId);
+        if (
+            c.status != ICharityCore.CampaignStatus.Failed &&
+                c.status != ICharityCore.CampaignStatus.Cancelled
+        ) {
+            return 0;
+        }
+        return _calculateRefundAmount(campaignId, donor);
+    }
+
+    function getRefundRatioBps(uint256 campaignId) external view returns (uint256) {
+        uint256 escrow = _escrowBalances[campaignId];
+        uint256 weight = _remainingRefundWeight[campaignId];
+        if (weight == 0) return 0;
+        return (escrow * 10_000) / weight;
+    }
+
+    function hasActiveOrQueuedProposal(uint256 campaignId) external view returns (bool) {
+        return governanceDAO.hasActiveOrQueuedProposal(campaignId);
+    }
+
     function canRefund(uint256 cid, address donor)
-        external view
+        external
+        view
         returns (bool eligible, uint256 amount, uint256 refundDeadline)
     {
         ICharityCore.Campaign memory c = charityCore.getCampaign(cid);
-        amount        = _donorBalances[cid][donor];
         refundDeadline = c.deadline + maxRefundPeriod;
-        if (amount == 0) return (false, 0, refundDeadline);
-        if (c.status == ICharityCore.CampaignStatus.Failed) return (true, amount, refundDeadline);
-        if (c.status == ICharityCore.CampaignStatus.Cancelled) return (true, amount, refundDeadline);
-        if (block.timestamp > c.deadline) return (true, amount, refundDeadline);
+        if (_donorBalances[cid][donor] == 0) return (false, 0, refundDeadline);
+        if (c.status == ICharityCore.CampaignStatus.Failed) {
+            amount = _calculateRefundAmount(cid, donor);
+            return (amount > 0, amount, refundDeadline);
+        }
+        if (c.status == ICharityCore.CampaignStatus.Cancelled) {
+            amount = _calculateRefundAmount(cid, donor);
+            return (amount > 0, amount, refundDeadline);
+        }
         return (false, 0, refundDeadline);
+    }
+
+    function _calculateRefundAmount(uint256 campaignId, address donor)
+        internal
+        view
+        returns (uint256)
+    {
+        uint256 donorBalance = _donorBalances[campaignId][donor];
+        if (donorBalance == 0) return 0;
+
+        uint256 escrow = _escrowBalances[campaignId];
+        if (escrow == 0) return 0;
+
+        uint256 remainingWeight = _remainingRefundWeight[campaignId];
+        if (remainingWeight == 0) return 0;
+
+        return (donorBalance * escrow) / remainingWeight;
     }
 
     function _recordDonor(uint256 cid, address donor, uint256 amount) internal {
@@ -330,13 +429,18 @@ contract DonationVault is IDonationVault, ReentrancyGuard, Ownable {
         userTotalDonated[donor]               += amount;
     }
 
-    function _tier(uint256 amt) internal pure returns (IImpactNFT.DonorTier) {
+    function _tierETH(uint256 amt) internal pure returns (IImpactNFT.DonorTier) {
         if (amt >= 0.1 ether)  return IImpactNFT.DonorTier.Gold;
         if (amt >= 0.01 ether) return IImpactNFT.DonorTier.Silver;
         return IImpactNFT.DonorTier.Bronze;
     }
 
-    /// @dev Update NFT cumulative donation and attempt tier upgrade (no-op if tier unchanged)
+    function _tierUSDC(uint256 amt) internal pure returns (IImpactNFT.DonorTier) {
+        if (amt >= 100e6) return IImpactNFT.DonorTier.Gold;
+        if (amt >= 10e6)  return IImpactNFT.DonorTier.Silver;
+        return IImpactNFT.DonorTier.Bronze;
+    }
+
     function _syncDonorNFT(address donor, uint256 campaignId, uint256 netAmount) internal {
         uint256 tokenId = impactNFT.getDonorTokenForCampaign(donor, campaignId);
         if (tokenId == 0) return;

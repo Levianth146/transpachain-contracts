@@ -123,6 +123,8 @@ contract CharityCore is ICharityCore, AccessControl, Pausable {
         external onlyTrusted campaignExists(campaignId)
     {
         Campaign storage c = _campaigns[campaignId];
+        require(c.status == CampaignStatus.Active, "CharityCore: not active");
+        require(c.completedMilestones < c.totalMilestones, "CharityCore: milestones completed");
         c.completedMilestones++;
         if (c.completedMilestones == c.totalMilestones) {
             c.status = CampaignStatus.Successful;
@@ -152,6 +154,7 @@ contract CharityCore is ICharityCore, AccessControl, Pausable {
         Campaign storage c = _campaigns[campaignId];
         require(msg.sender == c.orgAddress,        "CharityCore: not org");
         require(c.status == CampaignStatus.Active, "CharityCore: not active");
+        require(c.completedMilestones == 0,        "CharityCore: milestones released");
         c.status      = CampaignStatus.Cancelled;
         c.cancelledAt = block.timestamp;
         emit CampaignCancelled(campaignId, msg.sender, block.timestamp);
@@ -172,15 +175,20 @@ contract CharityCore is ICharityCore, AccessControl, Pausable {
         require(c.status == CampaignStatus.Active, "CharityCore: not active");
         bool goalReached = c.raisedAmount >= c.goalAmount;
         bool expired     = block.timestamp > c.deadline;
-        require(goalReached || expired, "CharityCore: cannot finalize");
-        CampaignStatus finalStatus = goalReached
-            ? CampaignStatus.Successful
-            : CampaignStatus.Failed;
+        CampaignStatus finalStatus;
+        if (expired && !goalReached) {
+            finalStatus = CampaignStatus.Failed;
+        } else if (c.completedMilestones == c.totalMilestones) {
+            finalStatus = CampaignStatus.Successful;
+        } else {
+            revert("CharityCore: cannot finalize");
+        }
         c.status = finalStatus;
         emit CampaignFinalized(campaignId, finalStatus);
     }
 
-    /// @notice Whether an active campaign may be finalized (goal met or deadline passed).
+    /// @notice Whether an active campaign may be finalized.
+    /// @dev Failed: expired without goal. Successful: all milestones released.
     function canFinalize(uint256 campaignId)
         external view campaignExists(campaignId)
         returns (bool eligible, bool goalReached, bool expired)
@@ -189,7 +197,13 @@ contract CharityCore is ICharityCore, AccessControl, Pausable {
         if (c.status != CampaignStatus.Active) return (false, false, false);
         goalReached = c.raisedAmount >= c.goalAmount;
         expired     = block.timestamp > c.deadline;
-        eligible    = goalReached || expired;
+        if (expired && !goalReached) {
+            eligible = true;
+        } else if (c.completedMilestones == c.totalMilestones) {
+            eligible = true;
+        } else {
+            eligible = false;
+        }
     }
 
     function extendDeadline(uint256 campaignId, uint256 newDeadline)

@@ -94,6 +94,12 @@ contract DonationVaultFuzz is Test {
             );
     }
 
+    function _releaseMilestone(uint256 cid, uint8 idx) internal {
+        uint256 pid = vault.getMilestone(cid, idx).proposalId;
+        vm.prank(address(dao));
+        vault.releaseMilestoneFunds(cid, idx, pid);
+    }
+
     function _donateETH(address donor, uint256 cid, uint256 amount) internal {
         vm.deal(donor, amount);
         vm.prank(donor);
@@ -215,7 +221,15 @@ contract DonationVaultFuzz is Test {
     /// @dev After refund, donor gets back exact net amount and escrow decreases
     function testFuzz_refund_exactBalance(uint96 amount) public {
         vm.assume(amount >= 0.001 ether);
-        uint256 cid = _createCampaignETH();
+        vm.prank(org);
+        uint256 cid = core.createCampaign{value: 0.001 ether}(
+            "QmCID",
+            1e30,
+            block.timestamp + DEADLINE_OFFSET,
+            MILESTONES,
+            ICharityCore.PaymentToken.ETH,
+            "test"
+        );
 
         address donor = makeAddr("refundDonor");
         _donateETH(donor, cid, uint256(amount));
@@ -223,7 +237,6 @@ contract DonationVaultFuzz is Test {
         uint256 donorBal = vault.getDonorAmount(cid, donor);
         uint256 escrowBefore = vault.getCampaignEscrowBalance(cid);
 
-        // Fail campaign
         vm.warp(block.timestamp + DEADLINE_OFFSET + 1);
         vm.prank(admin);
         core.finalizeCampaign(cid);
@@ -281,7 +294,7 @@ contract DonationVaultFuzz is Test {
         uint8 milestoneIndex
     ) public {
         vm.assume(donation >= 0.01 ether);
-        vm.assume(milestoneIndex < MILESTONES);
+        vm.assume(milestoneIndex == 0);
 
         uint256 cid = _createCampaignETH();
         address donor = makeAddr("proofDonor");
@@ -467,7 +480,7 @@ contract DonationVaultFuzz is Test {
             uint256 releaseAmt = vault.getMilestone(cid, i).releaseAmount;
 
             vm.prank(address(dao));
-            vault.releaseMilestoneFunds(cid, i);
+            _releaseMilestone(cid, i);
 
             totalReleased += releaseAmt;
         }
@@ -528,7 +541,15 @@ contract DonationVaultFuzz is Test {
     /// @dev After USDC refund, donor gets back exact net amount
     function testFuzz_refundUSDC_exactBalance(uint64 amount) public {
         vm.assume(amount > 0);
-        uint256 cid = _createCampaignUSDC();
+        vm.prank(org);
+        uint256 cid = core.createCampaign{value: 0.001 ether}(
+            "QmCID",
+            1e30,
+            block.timestamp + DEADLINE_OFFSET,
+            MILESTONES,
+            ICharityCore.PaymentToken.USDC,
+            "test"
+        );
 
         address donor = makeAddr("refundUSDC");
         _donateUSDC(donor, cid, uint256(amount));
@@ -536,7 +557,6 @@ contract DonationVaultFuzz is Test {
         uint256 donorBal = vault.getDonorAmount(cid, donor);
         uint256 escrowBefore = vault.getCampaignEscrowBalance(cid);
 
-        // Fail campaign
         vm.warp(block.timestamp + DEADLINE_OFFSET + 1);
         vm.prank(admin);
         core.finalizeCampaign(cid);
@@ -614,20 +634,33 @@ contract DonationVaultFuzz is Test {
     }
 
     /// @dev canRefund returns true when past deadline (even without finalize)
-    function testFuzz_canRefund_correctPastDeadline(uint96 amount) public {
+    function testFuzz_canRefund_requiresFinalizeAfterDeadline(uint96 amount) public {
         vm.assume(amount >= 0.001 ether);
-        uint256 cid = _createCampaignETH();
+        vm.prank(org);
+        uint256 cid = core.createCampaign{value: 0.001 ether}(
+            "QmCID",
+            1e30,
+            block.timestamp + DEADLINE_OFFSET,
+            MILESTONES,
+            ICharityCore.PaymentToken.ETH,
+            "test"
+        );
 
         address donor = makeAddr("canRefundDeadline");
         _donateETH(donor, cid, uint256(amount));
 
-        uint256 donorBal = vault.getDonorAmount(cid, donor);
-
         vm.warp(block.timestamp + DEADLINE_OFFSET + 1);
 
-        (bool eligible, uint256 refundAmount, ) = vault.canRefund(cid, donor);
+        (bool eligible, , ) = vault.canRefund(cid, donor);
+        assertFalse(eligible);
+
+        vm.prank(admin);
+        core.finalizeCampaign(cid);
+
+        uint256 refundAmount;
+        (eligible, refundAmount, ) = vault.canRefund(cid, donor);
         assertTrue(eligible);
-        assertEq(refundAmount, donorBal);
+        assertEq(refundAmount, vault.getRefundableAmount(cid, donor));
     }
 
     // ─────────────────────────────────────────────

@@ -51,7 +51,14 @@ contract MockERC20 {
  *         CharityCore → DonationVault → GovernanceDAO → DonationVault (release)
  */
 contract TranspaChainTest is Test {
-    event DonationReceived(uint256 indexed campaignId, address indexed donor, uint256 amount, uint8 tokenType);
+    event DonationReceived(
+        uint256 indexed campaignId,
+        address indexed donor,
+        uint256 grossAmount,
+        uint256 netAmount,
+        uint256 fee,
+        uint8 tokenType
+    );
 
     CharityCore core;
     DonationVault vault;
@@ -119,6 +126,12 @@ contract TranspaChainTest is Test {
             ICharityCore.PaymentToken.ETH,
             "education"
         );
+    }
+
+    function _releaseMilestone(uint256 id, uint8 idx) internal {
+        uint256 pid = vault.getMilestone(id, idx).proposalId;
+        vm.prank(address(dao));
+        vault.releaseMilestoneFunds(id, idx, pid);
     }
 
     function _createUSDCampaign() internal returns (uint256 campaignId) {
@@ -223,19 +236,14 @@ contract TranspaChainTest is Test {
         assertEq(uint8(c.status), uint8(ICharityCore.CampaignStatus.Failed));
     }
 
-    function test_FinalizeCampaignSuccessful() public {
+    function test_FinalizeCampaignSuccessful_requiresAllMilestones() public {
         uint256 id = _createCampaign();
 
         vm.prank(donor1);
         vault.donate{value: _grossForNet(GOAL)}(id);
 
+        vm.expectRevert("CharityCore: cannot finalize");
         core.finalizeCampaign(id);
-
-        ICharityCore.Campaign memory c = core.getCampaign(id);
-        assertEq(
-            uint8(c.status),
-            uint8(ICharityCore.CampaignStatus.Successful)
-        );
     }
 
     function test_FinalizeCampaignSuccessful_atGoalBeforeDeadline() public {
@@ -245,16 +253,12 @@ contract TranspaChainTest is Test {
         vault.donate{value: _grossForNet(GOAL)}(id);
 
         (bool eligible, bool goalReached, bool expired) = core.canFinalize(id);
-        assertTrue(eligible);
+        assertFalse(eligible);
         assertTrue(goalReached);
         assertFalse(expired);
 
-        vm.prank(org);
+        vm.expectRevert("CharityCore: cannot finalize");
         core.finalizeCampaign(id);
-        assertEq(
-            uint8(core.getCampaign(id).status),
-            uint8(ICharityCore.CampaignStatus.Successful)
-        );
     }
 
     function testRevert_FinalizeCampaignBeforeGoalAndDeadline() public {
@@ -398,7 +402,8 @@ contract TranspaChainTest is Test {
 
         vm.prank(donor1);
         vm.expectEmit(true, true, false, true);
-        emit DonationReceived(id, donor1, 0.5 ether, 0);
+        uint256 fee = (0.5 ether * 100) / 10_000;
+        emit DonationReceived(id, donor1, 0.5 ether, 0.5 ether - fee, fee, 0);
         vault.donate{value: 0.5 ether}(id);
     }
 
@@ -634,8 +639,7 @@ contract TranspaChainTest is Test {
         assertFalse(m.released);
 
         // Simulate governance approving (direct call as dao address)
-        vm.prank(address(dao));
-        vault.releaseMilestoneFunds(id, 0);
+        _releaseMilestone(id, 0);
 
         m = vault.getMilestone(id, 0);
         assertTrue(m.released);
@@ -773,7 +777,7 @@ contract TranspaChainTest is Test {
         );
     }
 
-    function test_ResubmitProposal() public {
+    function test_ResubmitProposalViaVault() public {
         uint256 id = _createCampaign();
 
         vm.prank(donor1);
@@ -784,10 +788,8 @@ contract TranspaChainTest is Test {
         vm.prank(org);
         vault.submitMilestoneProof(id, 0, "QmProof_m0");
 
-        DonationVault.Milestone memory m = vault.getMilestone(id, 0);
-        uint256 oldProposalId = m.proposalId;
+        uint256 oldProposalId = vault.getMilestone(id, 0).proposalId;
 
-        // Vote Against to defeat it
         vm.prank(donor1);
         dao.castVote(oldProposalId, IGovernanceDAO.VoteChoice.Against);
         vm.prank(donor2);
@@ -796,8 +798,9 @@ contract TranspaChainTest is Test {
         vm.roll(block.number + 21601);
         dao.queueProposal(oldProposalId);
 
-        // Resubmit
-        uint256 newProposalId = dao.resubmitProposal(oldProposalId);
+        vm.prank(org);
+        vault.submitMilestoneProof(id, 0, "QmProofResubmit");
+        uint256 newProposalId = vault.getMilestone(id, 0).proposalId;
         assertTrue(newProposalId > oldProposalId);
         assertEq(
             uint8(dao.getProposalState(newProposalId)),
@@ -862,12 +865,16 @@ contract TranspaChainTest is Test {
     function testRevert_ReleaseFundsNotDAO() public {
         uint256 id = _createCampaign();
 
+        vm.prank(donor1);
+        vault.donate{value: 1 ether}(id);
+
         vm.prank(org);
         vault.submitMilestoneProof(id, 0, "QmProof0");
 
-        vm.prank(random);
+        uint256 pid = vault.getMilestone(id, 0).proposalId;
         vm.expectRevert("Vault: only DAO");
-        vault.releaseMilestoneFunds(id, 0);
+        vm.prank(random);
+        vault.releaseMilestoneFunds(id, 0, pid);
     }
 
     function testRevert_MintNFTNotVault() public {

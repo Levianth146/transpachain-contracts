@@ -139,6 +139,10 @@ interface IGovernanceDAO {
         uint256 campaignId
     ) external view returns (uint256 proposalId);
 
+    function hasActiveOrQueuedProposal(
+        uint256 campaignId
+    ) external view returns (bool);
+
     function resubmitProposal(
         uint256 oldProposalId
     ) external returns (uint256 newProposalId);

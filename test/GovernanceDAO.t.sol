@@ -485,9 +485,8 @@ contract GovernanceDAOTest is Test {
         dao.queueProposal(pid);
     }
 
-    function test_queueProposal_singleVoter_passesAmongVoters() public {
+    function test_queueProposal_singleVoter_insufficientQuorum_defeats() public {
         uint256 cid = _createCampaignETH();
-        // 3 donors but only 1 participates — 100% of cast votes are For
         uint256 pid = _donateMultipleAndCreateProposal(
             cid,
             2 ether,
@@ -503,7 +502,7 @@ contract GovernanceDAOTest is Test {
 
         assertEq(
             uint8(dao.getProposalState(pid)),
-            uint8(IGovernanceDAO.ProposalState.Queued)
+            uint8(IGovernanceDAO.ProposalState.Defeated)
         );
     }
 
@@ -744,19 +743,18 @@ contract GovernanceDAOTest is Test {
     }
 
     // ─────────────────────────────────────────────
-    // resubmitProposal
+    // resubmitProposal (disabled — use DonationVault after defeat)
     // ─────────────────────────────────────────────
 
-    function test_resubmitProposal_createsNewProposal() public {
-        uint256 cid = _createCampaignETH();
-        uint256 pid = _donateMultipleAndCreateProposal(
-            cid,
-            2 ether,
-            2 ether,
-            2 ether
-        );
+    function test_resubmitProposal_disabled() public {
+        vm.expectRevert("DAO: resubmit disabled");
+        dao.resubmitProposal(1);
+    }
 
-        // For/Against split → defeated
+    function test_resubmitViaVault_afterDefeat() public {
+        uint256 cid = _createCampaignETH();
+        uint256 pid = _donateMultipleAndCreateProposal(cid, 2 ether, 2 ether, 2 ether);
+
         vm.prank(donor1);
         dao.castVote(pid, IGovernanceDAO.VoteChoice.For);
         vm.prank(donor2);
@@ -764,158 +762,20 @@ contract GovernanceDAOTest is Test {
 
         _advancePastVotingPeriod();
         dao.queueProposal(pid);
-
-        // Verify defeated
         assertEq(
             uint8(dao.getProposalState(pid)),
             uint8(IGovernanceDAO.ProposalState.Defeated)
         );
 
-        // Resubmit
-        uint256 newPid = dao.resubmitProposal(pid);
+        vm.prank(org);
+        vault.submitMilestoneProof(cid, 0, "QmProofResubmit");
 
-        IGovernanceDAO.Proposal memory newP = dao.getProposal(newPid);
-        assertEq(newPid, pid + 1);
-        assertEq(newP.campaignId, cid);
-        assertEq(newP.milestoneIndex, 0);
-        assertEq(newP.proofCID, "QmProof0");
-        assertEq(newP.forVotes, 0);
-        assertEq(newP.againstVotes, 0);
-        assertEq(newP.abstainVotes, 0);
-        assertEq(uint8(newP.state), uint8(IGovernanceDAO.ProposalState.Active));
-        assertEq(newP.startBlock, block.number);
-        assertEq(newP.endBlock, block.number + VOTING_PERIOD);
-    }
-
-    function test_resubmitProposal_emitsProposalResubmitted() public {
-        uint256 cid = _createCampaignETH();
-        uint256 pid = _donateMultipleAndCreateProposal(
-            cid,
-            2 ether,
-            2 ether,
-            2 ether
-        );
-
-        vm.prank(donor1);
-        dao.castVote(pid, IGovernanceDAO.VoteChoice.For);
-        vm.prank(donor2);
-        dao.castVote(pid, IGovernanceDAO.VoteChoice.Against);
-
-        _advancePastVotingPeriod();
-        dao.queueProposal(pid);
-
-        vm.expectEmit(true, true, false, true);
-        emit ProposalResubmitted(pid + 1, pid);
-        dao.resubmitProposal(pid);
-    }
-
-    function test_resubmitProposal_emitsProposalCreated() public {
-        uint256 cid = _createCampaignETH();
-        uint256 pid = _donateMultipleAndCreateProposal(
-            cid,
-            2 ether,
-            2 ether,
-            2 ether
-        );
-
-        vm.prank(donor1);
-        dao.castVote(pid, IGovernanceDAO.VoteChoice.For);
-        vm.prank(donor2);
-        dao.castVote(pid, IGovernanceDAO.VoteChoice.Against);
-
-        _advancePastVotingPeriod();
-        dao.queueProposal(pid);
-
-        vm.expectEmit(true, true, false, true);
-        emit ProposalCreated(
-            pid + 1,
-            cid,
-            0,
-            "QmProof0",
-            block.number + VOTING_PERIOD
-        );
-        dao.resubmitProposal(pid);
-    }
-
-    function test_resubmitProposal_tracksInCampaignProposals() public {
-        uint256 cid = _createCampaignETH();
-        uint256 pid = _donateMultipleAndCreateProposal(
-            cid,
-            2 ether,
-            2 ether,
-            2 ether
-        );
-
-        vm.prank(donor1);
-        dao.castVote(pid, IGovernanceDAO.VoteChoice.For);
-        vm.prank(donor2);
-        dao.castVote(pid, IGovernanceDAO.VoteChoice.Against);
-
-        _advancePastVotingPeriod();
-        dao.queueProposal(pid);
-
-        dao.resubmitProposal(pid);
-
-        uint256[] memory proposals = dao.getCampaignProposals(cid);
-        assertEq(proposals.length, 2);
-        assertEq(proposals[0], pid);
-        assertEq(proposals[1], pid + 1);
-    }
-
-    function test_resubmitProposal_newProposalCanBeVotedAndExecuted() public {
-        uint256 cid = _createCampaignETH();
-        uint256 pid = _donateMultipleAndCreateProposal(
-            cid,
-            2 ether,
-            2 ether,
-            2 ether
-        );
-
-        // Defeat the first proposal
-        vm.prank(donor1);
-        dao.castVote(pid, IGovernanceDAO.VoteChoice.For);
-        vm.prank(donor2);
-        dao.castVote(pid, IGovernanceDAO.VoteChoice.Against);
-        _advancePastVotingPeriod();
-        dao.queueProposal(pid);
-
-        // Resubmit
-        uint256 newPid = dao.resubmitProposal(pid);
-
-        // All donors vote For on new proposal
-        vm.prank(donor1);
-        dao.castVote(newPid, IGovernanceDAO.VoteChoice.For);
-        vm.prank(donor2);
-        dao.castVote(newPid, IGovernanceDAO.VoteChoice.For);
-        vm.prank(donor3);
-        dao.castVote(newPid, IGovernanceDAO.VoteChoice.For);
-
-        _advancePastVotingPeriod();
-        dao.queueProposal(newPid);
-        _advancePastTimelock();
-
-        dao.executeProposal(newPid);
-
+        uint256 newPid = vault.getMilestone(cid, 0).proposalId;
+        assertGt(newPid, pid);
         assertEq(
             uint8(dao.getProposalState(newPid)),
-            uint8(IGovernanceDAO.ProposalState.Executed)
+            uint8(IGovernanceDAO.ProposalState.Active)
         );
-    }
-
-    // ─── resubmitProposal revert cases ───
-
-    function test_resubmitProposal_revertsIfNotFound() public {
-        vm.expectRevert("DAO: not found");
-        dao.resubmitProposal(999);
-    }
-
-    function test_resubmitProposal_revertsIfNotDefeated() public {
-        uint256 cid = _createCampaignETH();
-        uint256 pid = _donateAndCreateProposal(cid, 1 ether);
-
-        // Proposal is Active, not Defeated
-        vm.expectRevert("DAO: not defeated");
-        dao.resubmitProposal(pid);
     }
 
     // ─────────────────────────────────────────────
@@ -1090,8 +950,11 @@ contract GovernanceDAOTest is Test {
             uint8(IGovernanceDAO.ProposalState.Defeated)
         );
 
-        // Resubmit
-        uint256 pid2 = dao.resubmitProposal(pid1);
+        // Resubmit via DonationVault after defeat
+        vm.prank(org);
+        vault.submitMilestoneProof(cid, 0, "QmProofResubmit");
+        uint256 pid2 = vault.getMilestone(cid, 0).proposalId;
+        assertGt(pid2, pid1);
         assertEq(
             uint8(dao.getProposalState(pid2)),
             uint8(IGovernanceDAO.ProposalState.Active)

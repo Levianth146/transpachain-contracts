@@ -5,7 +5,7 @@ pragma solidity ^0.8.20;
 /// @notice Interface for ETH/USDC escrow and milestone-based fund release
 interface IDonationVault {
 
-    event DonationReceived(uint256 indexed campaignId, address indexed donor, uint256 amount, uint8 tokenType);
+    event DonationReceived(uint256 indexed campaignId, address indexed donor, uint256 grossAmount, uint256 netAmount, uint256 fee, uint8 tokenType);
     event MilestoneProofSubmitted(uint256 indexed campaignId, uint8 milestoneIndex, string proofCID, uint256 proposalId);
     event FundsReleased(uint256 indexed campaignId, uint8 milestoneIndex, uint256 amount, address recipient);
     event RefundProcessed(uint256 indexed campaignId, address indexed donor, uint256 amount);
@@ -17,7 +17,7 @@ interface IDonationVault {
     function donate(uint256 campaignId) external payable;
     function donateUSDC(uint256 campaignId, uint256 amount) external;
     function submitMilestoneProof(uint256 campaignId, uint8 milestoneIndex, string calldata proofCID) external;
-    function releaseMilestoneFunds(uint256 campaignId, uint8 milestoneIndex) external;
+    function releaseMilestoneFunds(uint256 campaignId, uint8 milestoneIndex, uint256 proposalId) external;
     function claimRefund(uint256 campaignId) external;
     function emergencyRefundBatch(uint256 campaignId, uint256 offset, uint256 limit) external;
     function setTreasury(address newTreasury) external;
@@ -29,4 +29,8 @@ interface IDonationVault {
     function getTotalEscrow() external view returns (uint256);
     function getCharityDonors(uint256 campaignId) external view returns (address[] memory);
     function canRefund(uint256 campaignId, address donor) external view returns (bool eligible, uint256 amount, uint256 refundDeadline);
+    function getRefundableAmount(uint256 campaignId, address donor) external view returns (uint256);
+    function getTotalDeposited(uint256 campaignId) external view returns (uint256);
+    function getRefundRatioBps(uint256 campaignId) external view returns (uint256);
+    function hasActiveOrQueuedProposal(uint256 campaignId) external view returns (bool);
 }

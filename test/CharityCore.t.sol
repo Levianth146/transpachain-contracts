@@ -212,22 +212,19 @@ contract CharityCoreTest is Test {
 
     // ─── finalize ───
 
-    function test_finalize_atGoalBeforeDeadline_successful() public {
+    function test_finalize_atGoalBeforeDeadline_revertsUntilMilestonesDone() public {
         uint256 id = _createCampaign();
 
         vm.prank(donor);
         vault.donate{value: _grossForNet(GOAL)}(id);
 
         (bool eligible, bool goalReached, bool expired) = core.canFinalize(id);
-        assertTrue(eligible);
+        assertFalse(eligible);
         assertTrue(goalReached);
         assertFalse(expired);
 
+        vm.expectRevert("CharityCore: cannot finalize");
         core.finalizeCampaign(id);
-        assertEq(
-            uint8(core.getCampaign(id).status),
-            uint8(ICharityCore.CampaignStatus.Successful)
-        );
     }
 
     function test_finalize_afterDeadline_failedWhenUnderGoal() public {

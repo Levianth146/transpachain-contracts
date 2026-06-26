@@ -29,7 +29,14 @@ contract MockUSDC is ERC20 {
 // ─────────────────────────────────────────────
 contract DonationVaultTest is Test {
     // ─── Events (mirror từ DonationVault) ────────────────────────
-    event DonationReceived(uint256 indexed campaignId, address indexed donor, uint256 amount, uint8 tokenType);
+    event DonationReceived(
+        uint256 indexed campaignId,
+        address indexed donor,
+        uint256 grossAmount,
+        uint256 netAmount,
+        uint256 fee,
+        uint8 tokenType
+    );
     event PlatformFeeCollected(uint256 indexed campaignId, uint256 feeAmount);
     event MilestoneProofSubmitted(uint256 indexed campaignId, uint8 milestoneIndex, string proofCID, uint256 proposalId);
     event FundsReleased(uint256 indexed campaignId, uint8 milestoneIndex, uint256 amount, address recipient);
@@ -150,6 +157,12 @@ contract DonationVaultTest is Test {
         core.finalizeCampaign(campaignId);
     }
 
+    function _releaseMilestone(uint256 cid, uint8 idx) internal {
+        uint256 pid = vault.getMilestone(cid, idx).proposalId;
+        vm.prank(address(dao));
+        vault.releaseMilestoneFunds(cid, idx, pid);
+    }
+
     // ─────────────────────────────────────────────
     // Constructor
     // ─────────────────────────────────────────────
@@ -197,10 +210,13 @@ contract DonationVaultTest is Test {
 
         vm.prank(donor1);
         vm.expectEmit(true, true, false, true);
+        uint256 fee = (1 ether * 100) / 10_000;
         emit DonationReceived(
             cid,
             donor1,
             1 ether,
+            1 ether - fee,
+            fee,
             uint8(ICharityCore.PaymentToken.ETH)
         );
         vault.donate{value: 1 ether}(cid);
@@ -438,10 +454,13 @@ contract DonationVaultTest is Test {
         vm.startPrank(donor1);
         usdc.approve(address(vault), 100e6);
         vm.expectEmit(true, true, false, true);
+        uint256 fee = (100e6 * 100) / 10_000;
         emit DonationReceived(
             cid,
             donor1,
             100e6,
+            100e6 - fee,
+            fee,
             uint8(ICharityCore.PaymentToken.USDC)
         );
         vault.donateUSDC(cid, 100e6);
@@ -629,7 +648,7 @@ contract DonationVaultTest is Test {
         uint256 releaseAmount = vault.getMilestone(cid, 0).releaseAmount;
 
         vm.prank(address(dao));
-        vault.releaseMilestoneFunds(cid, 0);
+        _releaseMilestone(cid, 0);
 
         assertEq(org.balance - orgBalBefore, releaseAmount);
         assertTrue(vault.getMilestone(cid, 0).released);
@@ -650,7 +669,7 @@ contract DonationVaultTest is Test {
         uint256 releaseAmount = vault.getMilestone(cid, 0).releaseAmount;
 
         vm.prank(address(dao));
-        vault.releaseMilestoneFunds(cid, 0);
+        _releaseMilestone(cid, 0);
 
         assertEq(usdc.balanceOf(org) - orgBalBefore, releaseAmount);
     }
@@ -668,7 +687,7 @@ contract DonationVaultTest is Test {
         uint256 releaseAmount = vault.getMilestone(cid, 0).releaseAmount;
 
         vm.prank(address(dao));
-        vault.releaseMilestoneFunds(cid, 0);
+        _releaseMilestone(cid, 0);
 
         assertEq(
             vault.getCampaignEscrowBalance(cid),
@@ -691,7 +710,7 @@ contract DonationVaultTest is Test {
         vm.prank(address(dao));
         vm.expectEmit(true, false, false, true);
         emit FundsReleased(cid, 0, releaseAmount, org);
-        vault.releaseMilestoneFunds(cid, 0);
+        _releaseMilestone(cid, 0);
     }
 
     function test_releaseMilestoneFunds_revertsIfNotDAO() public {
@@ -703,9 +722,10 @@ contract DonationVaultTest is Test {
         vm.prank(org);
         vault.submitMilestoneProof(cid, 0, "QmProof0");
 
-        vm.prank(nobody);
+        uint256 pid = vault.getMilestone(cid, 0).proposalId;
         vm.expectRevert("Vault: only DAO");
-        vault.releaseMilestoneFunds(cid, 0);
+        vm.prank(nobody);
+        vault.releaseMilestoneFunds(cid, 0, pid);
     }
 
     function test_releaseMilestoneFunds_revertsIfAlreadyReleased() public {
@@ -718,12 +738,13 @@ contract DonationVaultTest is Test {
         vault.submitMilestoneProof(cid, 0, "QmProof0");
 
         vm.prank(address(dao));
-        vault.releaseMilestoneFunds(cid, 0);
+        _releaseMilestone(cid, 0);
 
         // Try to release again - should revert because released=true
+        uint256 pid = vault.getMilestone(cid, 0).proposalId;
+        vm.expectRevert("Vault: already released");
         vm.prank(address(dao));
-        vm.expectRevert("Vault: invalid");
-        vault.releaseMilestoneFunds(cid, 0);
+        vault.releaseMilestoneFunds(cid, 0, pid);
     }
 
     function test_releaseMilestoneFunds_dividesEquallyAmongMilestones() public {
@@ -742,21 +763,21 @@ contract DonationVaultTest is Test {
         assertEq(vault.getMilestone(cid, 0).releaseAmount, perMilestone);
 
         vm.prank(address(dao));
-        vault.releaseMilestoneFunds(cid, 0);
+        _releaseMilestone(cid, 0);
 
         // Submit and release milestone 1
         vm.prank(org);
         vault.submitMilestoneProof(cid, 1, "QmP1");
 
         vm.prank(address(dao));
-        vault.releaseMilestoneFunds(cid, 1);
+        _releaseMilestone(cid, 1);
 
         // Submit and release milestone 2
         vm.prank(org);
         vault.submitMilestoneProof(cid, 2, "QmP2");
 
         vm.prank(address(dao));
-        vault.releaseMilestoneFunds(cid, 2);
+        _releaseMilestone(cid, 2);
 
         // Escrow should be 0 (or near 0 due to rounding)
         assertEq(vault.getCampaignEscrowBalance(cid), 0);
@@ -855,22 +876,17 @@ contract DonationVaultTest is Test {
         vault.claimRefund(cid);
     }
 
-    function test_claimRefund_worksAfterDeadline() public {
+    function test_claimRefund_revertsBeforeFinalize() public {
         uint256 cid = _createCampaignETH();
 
         vm.prank(donor1);
         vault.donate{value: 1 ether}(cid);
 
-        // Campaign still active but past deadline (not finalized yet)
         vm.warp(block.timestamp + DEADLINE_OFFSET + 1);
 
-        uint256 donorAmount = vault.getDonorAmount(cid, donor1);
-        uint256 balBefore = donor1.balance;
-
         vm.prank(donor1);
+        vm.expectRevert("Vault: not refundable");
         vault.claimRefund(cid);
-
-        assertEq(donor1.balance - balBefore, donorAmount);
     }
 
     function test_claimRefund_partialMilestoneThenRefund() public {
@@ -883,10 +899,11 @@ contract DonationVaultTest is Test {
         vm.prank(org);
         vault.submitMilestoneProof(cid, 0, "QmP0");
         vm.prank(address(dao));
-        vault.releaseMilestoneFunds(cid, 0);
+        _releaseMilestone(cid, 0);
 
-        // Fail the campaign
-        _failCampaign(cid);
+        // Fail the campaign via admin cancel (goal may be reached after partial release)
+        vm.prank(admin);
+        core.adminCancelCampaign(cid);
 
         // After milestone release, escrow is reduced
         // donorAmount still shows full deposit but actual refund = remaining escrow
@@ -1137,10 +1154,10 @@ contract DonationVaultTest is Test {
 
         (bool eligible, uint256 amount, ) = vault.canRefund(cid, donor1);
         assertTrue(eligible);
-        assertEq(amount, vault.getDonorAmount(cid, donor1));
+        assertEq(amount, vault.getRefundableAmount(cid, donor1));
     }
 
-    function test_canRefund_returnsTrueIfPastDeadline() public {
+    function test_canRefund_requiresFinalizeAfterDeadline() public {
         uint256 cid = _createCampaignETH();
 
         vm.prank(donor1);
@@ -1148,9 +1165,16 @@ contract DonationVaultTest is Test {
 
         vm.warp(block.timestamp + DEADLINE_OFFSET + 1);
 
-        (bool eligible, uint256 amount, ) = vault.canRefund(cid, donor1);
+        (bool eligible, , ) = vault.canRefund(cid, donor1);
+        assertFalse(eligible);
+
+        _failCampaign(cid);
+
+        uint256 expected = vault.getRefundableAmount(cid, donor1);
+        uint256 amount;
+        (eligible, amount, ) = vault.canRefund(cid, donor1);
         assertTrue(eligible);
-        assertEq(amount, vault.getDonorAmount(cid, donor1));
+        assertEq(amount, expected);
     }
 
     function test_canRefund_returnsFalseIfActive() public {

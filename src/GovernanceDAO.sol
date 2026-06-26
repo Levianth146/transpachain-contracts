@@ -160,11 +160,13 @@ contract GovernanceDAO is IGovernanceDAO, Ownable, Pausable {
         require(p.state == ProposalState.Active, "DAO: not active");
         require(block.number > p.endBlock, "DAO: voting ongoing");
 
-        bool quorumMet = p.forVotes + p.againstVotes + p.abstainVotes > 0 &&
-            ((p.forVotes * 10000) /
-                (p.forVotes + p.againstVotes + p.abstainVotes)) >= QUORUM_BPS;
+        uint256 totalCast = p.forVotes + p.againstVotes + p.abstainVotes;
+        bool quorumMet = totalCast > 0 &&
+            p.totalVotingPower > 0 &&
+            (totalCast * 10000) / p.totalVotingPower >= QUORUM_BPS;
+        bool majorityFor = p.forVotes > p.againstVotes;
 
-        if (quorumMet && p.forVotes > p.againstVotes) {
+        if (quorumMet && majorityFor) {
             p.state = ProposalState.Queued;
             p.executeAfter = block.timestamp + TIMELOCK_DELAY;
             emit ProposalQueued(proposalId, p.executeAfter);
@@ -182,8 +184,8 @@ contract GovernanceDAO is IGovernanceDAO, Ownable, Pausable {
         require(p.state == ProposalState.Queued, "DAO: not queued");
         require(block.timestamp >= p.executeAfter, "DAO: timelock active");
 
+        donationVault.releaseMilestoneFunds(p.campaignId, p.milestoneIndex, proposalId);
         p.state = ProposalState.Executed;
-        donationVault.releaseMilestoneFunds(p.campaignId, p.milestoneIndex);
         emit ProposalExecuted(proposalId);
     }
 
@@ -263,41 +265,19 @@ contract GovernanceDAO is IGovernanceDAO, Ownable, Pausable {
         return 0;
     }
 
+    /// @dev Disabled — resubmit milestone proof via DonationVault after defeat.
     function resubmitProposal(
-        uint256 oldProposalId
-    ) external proposalExists(oldProposalId) returns (uint256 newProposalId) {
-        Proposal storage old = _proposals[oldProposalId];
-        require(old.state == ProposalState.Defeated, "DAO: not defeated");
-        require(old.id != 0, "DAO: not found");
+        uint256 /* oldProposalId */
+    ) external pure returns (uint256) {
+        revert("DAO: resubmit disabled");
+    }
 
-        _proposalCounter++;
-        newProposalId = _proposalCounter;
-
-        _proposals[newProposalId] = Proposal({
-            id: newProposalId,
-            campaignId: old.campaignId,
-            milestoneIndex: old.milestoneIndex,
-            proofCID: old.proofCID,
-            proposer: msg.sender,
-            startBlock: block.number,
-            endBlock: block.number + VOTING_PERIOD,
-            forVotes: 0,
-            againstVotes: 0,
-            abstainVotes: 0,
-            totalVotingPower: _totalQuadraticPower(old.campaignId),
-            state: ProposalState.Active,
-            executeAfter: 0,
-            snapshotBlock: block.number
-        });
-
-        _campaignProposals[old.campaignId].push(newProposalId);
-        emit ProposalCreated(
-            newProposalId,
-            old.campaignId,
-            old.milestoneIndex,
-            old.proofCID,
-            block.number + VOTING_PERIOD
-        );
-        emit ProposalResubmitted(newProposalId, oldProposalId);
+    function hasActiveOrQueuedProposal(uint256 campaignId) external view returns (bool) {
+        uint256[] memory ids = _campaignProposals[campaignId];
+        for (uint256 i = ids.length; i > 0; i--) {
+            ProposalState s = _proposals[ids[i - 1]].state;
+            if (s == ProposalState.Active || s == ProposalState.Queued) return true;
+        }
+        return false;
     }
 }
