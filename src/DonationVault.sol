@@ -397,8 +397,12 @@ contract DonationVault is IDonationVault, ReentrancyGuard, Ownable {
         disbursementController = controller;
     }
 
-    /// @notice V2: set YieldManager — owner-only, can be updated.
+    /// @notice V2: set YieldManager — owner-only, ONE-TIME (same rule as the disbursement controller).
+    /// @dev Must not be updatable: a replaceable YieldManager could call `moveToYield` and pull
+    ///      escrow out of the vault, bypassing DAO + timelock + Safe.
     function setYieldManager(address manager) external onlyOwner {
+        if (yieldManager != address(0)) revert TranspaChainErrors.YieldManagerAlreadySet();
+        if (manager == address(0)) revert TranspaChainErrors.ZeroAddress();
         yieldManager = manager;
     }
 
@@ -408,6 +412,10 @@ contract DonationVault is IDonationVault, ReentrancyGuard, Ownable {
     ///      must be able to re-enter via redeemAll → receiveFromYield on the same vault.
     function moveToYield(uint256 campaignId, uint256 assets) external onlyYieldManager {
         if (assets == 0) revert TranspaChainErrors.ZeroAmount();
+        // Defense in depth: only USDC campaigns can ever move escrow into yield.
+        if (charityCore.getCampaign(campaignId).paymentToken != ICharityCore.PaymentToken.USDC) {
+            revert TranspaChainErrors.NotUSDCCampaign();
+        }
         if (_escrowBalances[campaignId] < assets) revert TranspaChainErrors.InsufficientEscrow();
 
         _escrowBalances[campaignId]  -= assets;

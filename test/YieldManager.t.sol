@@ -442,4 +442,33 @@ contract YieldManagerTest is Test {
         // Org received USDC
         assertEq(usdc.balanceOf(org), release);
     }
+
+    // ─── Security review fixes (2026-11-20) ─────────────────────────────────
+
+    /// A replaceable YieldManager would let the vault owner point it at an EOA and
+    /// pull escrow via moveToYield, bypassing DAO + timelock + Safe.
+    function test_setYieldManager_isOneTime() public {
+        address attacker = makeAddr("attacker");
+        vm.prank(admin);
+        vm.expectRevert(TranspaChainErrors.YieldManagerAlreadySet.selector);
+        vault.setYieldManager(attacker);
+        assertEq(vault.yieldManager(), address(ym));
+    }
+
+    function test_setYieldManager_rejectsZero() public {
+        DonationVault fresh = new DonationVault(admin, address(core), address(dao), address(nft), address(usdc));
+        vm.prank(admin);
+        vm.expectRevert(TranspaChainErrors.ZeroAddress.selector);
+        fresh.setYieldManager(address(0));
+    }
+
+    function test_moveToYield_rejectsNativeCampaign() public {
+        vm.prank(org);
+        uint256 cid = core.createCampaign{value: 0.001 ether}(
+            "QmNative", 1 ether, block.timestamp + 30 days, 2, ICharityCore.PaymentToken.ETH, "Education"
+        );
+        vm.prank(address(ym));
+        vm.expectRevert(TranspaChainErrors.NotUSDCCampaign.selector);
+        vault.moveToYield(cid, 1);
+    }
 }

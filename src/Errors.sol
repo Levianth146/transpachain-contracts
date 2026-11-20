@@ -19,6 +19,8 @@ library TranspaChainErrors {
     // V2 Module A: Safe 3/5 disbursement
     error InsufficientLiquidity();
     error ControllerAlreadySet();
+    error YieldManagerAlreadySet();
+    error LossSinkNotBurn();
     error NotController();
     error NotApproved();
     error NotSafe();

@@ -61,6 +61,12 @@ async function main() {
   const usdc = requireAddress("USDC_ADDRESS");
   const safeAddr = requireAddress("DISBURSEMENT_SAFE");
   const lossSink = requireAddress("LOSS_SINK");
+  // simulateLoss() sends vault USDC to LOSS_SINK. If LOSS_SINK were a team wallet, "simulated losses"
+  // would be a way to take donor money. Enforce the burn address unless explicitly overridden.
+  const BURN = "0x000000000000000000000000000000000000dEaD";
+  if (lossSink.toLowerCase() !== BURN.toLowerCase() && process.env.ALLOW_CUSTOM_LOSS_SINK !== "1") {
+    throw new Error(`LOSS_SINK must be the burn address ${BURN} (set ALLOW_CUSTOM_LOSS_SINK=1 to override)`);
+  }
   const yieldController = optionalAddress("YIELD_CONTROLLER") ?? deployer.address;
 
   const chainId = Number((await ethers.provider.getNetwork()).chainId);
