@@ -13,11 +13,22 @@ interface IDonationVault {
     event PlatformFeeCollected(uint256 indexed campaignId, uint256 feeAmount);
     event TreasuryUpdated(address newTreasury);
     event MaxRefundPeriodUpdated(uint256 newPeriod);
+    /// @notice Emitted when DAO approves a milestone (approval only, no transfer)
+    event MilestoneApproved(uint256 indexed campaignId, uint8 milestoneIndex, uint256 proposalId, uint256 amount);
 
     function donate(uint256 campaignId) external payable;
     function donateUSDC(uint256 campaignId, uint256 amount) external;
     function submitMilestoneProof(uint256 campaignId, uint8 milestoneIndex, string calldata proofCID) external;
+
+    /// @dev V2: approval-only; called by GovernanceDAO.executeProposal
+    function approveMilestone(uint256 campaignId, uint8 milestoneIndex, uint256 proposalId) external;
+
+    /// @dev V2: actual transfer; called by DisbursementController (gated by Safe)
+    function payoutMilestone(uint256 campaignId, uint8 milestoneIndex, address recipient, uint256 amount) external;
+
+    /// @dev Deprecated in V2 — kept for compile compatibility; always reverts
     function releaseMilestoneFunds(uint256 campaignId, uint8 milestoneIndex, uint256 proposalId) external;
+
     function claimRefund(uint256 campaignId) external;
     function emergencyRefundBatch(uint256 campaignId, uint256 offset, uint256 limit) external;
     function setTreasury(address newTreasury) external;
@@ -33,4 +44,7 @@ interface IDonationVault {
     function getTotalDeposited(uint256 campaignId) external view returns (uint256);
     function getRefundRatioBps(uint256 campaignId) external view returns (uint256);
     function hasActiveOrQueuedProposal(uint256 campaignId) external view returns (bool);
+
+    /// @notice Address of the yield manager (address(0) until T2)
+    function yieldManager() external view returns (address);
 }

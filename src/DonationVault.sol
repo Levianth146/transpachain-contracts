@@ -18,11 +18,15 @@ import { TranspaChainErrors } from "./Errors.sol";
 contract DonationVault is IDonationVault, ReentrancyGuard, Ownable {
     using SafeERC20 for IERC20;
 
+    string public constant VERSION = "2";
+
     struct Milestone {
         string  proofCID;
         uint256 releaseAmount;
         bool    released;
         uint256 proposalId;
+        bool    approved;
+        uint64  approvedAt;
     }
 
     struct DonorInfo {
@@ -41,6 +45,12 @@ contract DonationVault is IDonationVault, ReentrancyGuard, Ownable {
     uint256 public constant MAX_FEE = 500;
     uint256 public maxRefundPeriod  = 90 days;
 
+    /// @notice V2: DisbursementController that calls payoutMilestone (set once)
+    address public disbursementController;
+
+    /// @notice V2: YieldManager stub (address(0) until T2)
+    address public yieldManager;
+
     mapping(uint256 => mapping(address => uint256)) private _donorBalances;
     mapping(uint256 => uint256)                     private _escrowBalances;
     mapping(uint256 => mapping(uint8 => Milestone)) private _milestones;
@@ -57,6 +67,11 @@ contract DonationVault is IDonationVault, ReentrancyGuard, Ownable {
 
     modifier onlyGovernanceDAO() {
         require(msg.sender == address(governanceDAO), "Vault: only DAO");
+        _;
+    }
+
+    modifier onlyDisbursementController() {
+        if (msg.sender != disbursementController) revert TranspaChainErrors.NotController();
         _;
     }
 
@@ -208,7 +223,14 @@ contract DonationVault is IDonationVault, ReentrancyGuard, Ownable {
         emit MilestoneProofSubmitted(campaignId, idx, proofCID, m.proposalId);
     }
 
-    function releaseMilestoneFunds(uint256 campaignId, uint8 idx, uint256 proposalId)
+    /// @dev Deprecated in V2. Kept as compile stub; always reverts.
+    function releaseMilestoneFunds(uint256, uint8, uint256) external pure {
+        revert("Vault: removed");
+    }
+
+    /// @notice V2: DAO approves a milestone — sets approved flag, no transfer.
+    /// @dev Called by GovernanceDAO.executeProposal instead of releaseMilestoneFunds.
+    function approveMilestone(uint256 campaignId, uint8 idx, uint256 proposalId)
         external
         nonReentrant
         onlyGovernanceDAO
@@ -220,26 +242,45 @@ contract DonationVault is IDonationVault, ReentrancyGuard, Ownable {
         Milestone storage m = _milestones[campaignId][idx];
         require(m.proposalId == proposalId, "Vault: wrong proposal");
         require(!m.released, "Vault: already released");
+        require(!m.approved, "Vault: already approved");
         require(idx == campaign.completedMilestones, "Vault: wrong order");
         require(bytes(m.proofCID).length > 0, "Vault: no proof");
+        require(m.releaseAmount > 0, "Vault: zero release");
 
-        uint256 releaseAmount = m.releaseAmount;
-        require(releaseAmount > 0, "Vault: zero release");
-        require(_escrowBalances[campaignId] >= releaseAmount, "Vault: insufficient");
+        m.approved   = true;
+        m.approvedAt = uint64(block.timestamp);
 
-        m.released = true;
-        _escrowBalances[campaignId] -= releaseAmount;
-        _totalEscrow                -= releaseAmount;
+        emit MilestoneApproved(campaignId, idx, proposalId, m.releaseAmount);
+    }
+
+    /// @notice V2: DisbursementController executes the actual payout after Safe approval.
+    function payoutMilestone(uint256 campaignId, uint8 idx, address recipient, uint256 amount)
+        external
+        nonReentrant
+        onlyDisbursementController
+    {
+        ICharityCore.Campaign memory campaign = charityCore.getCampaign(campaignId);
+        Milestone storage m = _milestones[campaignId][idx];
+
+        require(m.approved,   "Vault: not approved");
+        require(!m.released,  "Vault: already released");
+        require(amount == m.releaseAmount,     "Vault: wrong amount");
+        require(recipient == campaign.orgAddress, "Vault: wrong recipient");
+
+        if (_escrowBalances[campaignId] < amount) revert TranspaChainErrors.InsufficientLiquidity();
+
+        m.released                    = true;
+        _escrowBalances[campaignId]  -= amount;
+        _totalEscrow                 -= amount;
         charityCore.incrementMilestone(campaignId);
 
-        address org = campaign.orgAddress;
         if (campaign.paymentToken == ICharityCore.PaymentToken.USDC) {
-            usdcToken.safeTransfer(org, releaseAmount);
+            usdcToken.safeTransfer(recipient, amount);
         } else {
-            (bool ok,) = org.call{value: releaseAmount}("");
+            (bool ok,) = recipient.call{value: amount}("");
             require(ok, "Vault: transfer failed");
         }
-        emit FundsReleased(campaignId, idx, releaseAmount, org);
+        emit FundsReleased(campaignId, idx, amount, recipient);
     }
 
     function claimRefund(uint256 campaignId) external nonReentrant {
@@ -330,6 +371,18 @@ contract DonationVault is IDonationVault, ReentrancyGuard, Ownable {
     function updatePlatformFee(uint256 newFeeBps) external onlyOwner {
         require(newFeeBps <= MAX_FEE, "Vault: fee too high");
         platformFeeBps = newFeeBps;
+    }
+
+    /// @notice V2: set DisbursementController — one-time, owner-only.
+    function setDisbursementController(address controller) external onlyOwner {
+        if (disbursementController != address(0)) revert TranspaChainErrors.ControllerAlreadySet();
+        if (controller == address(0)) revert TranspaChainErrors.ZeroAddress();
+        disbursementController = controller;
+    }
+
+    /// @notice V2: set YieldManager — owner-only, can be updated (T2 preparation).
+    function setYieldManager(address manager) external onlyOwner {
+        yieldManager = manager;
     }
 
     function getDonorAmount(uint256 cid, address d) external view returns (uint256) {

@@ -16,4 +16,13 @@ library TranspaChainErrors {
     error OnlyDAO();
     error ZeroAddress();
     error FeeTooHigh();
+    // V2 Module A: Safe 3/5 disbursement
+    error InsufficientLiquidity();
+    error ControllerAlreadySet();
+    error NotController();
+    error NotApproved();
+    error NotSafe();
+    error RequestNotPending();
+    error ExpiredRequest();
+    error PendingRequestExists();
 }

@@ -201,7 +201,7 @@ contract GovernanceDAO is IGovernanceDAO, Ownable, Pausable {
         require(p.state == ProposalState.Queued, "DAO: not queued");
         require(block.timestamp >= p.executeAfter, "DAO: timelock active");
 
-        donationVault.releaseMilestoneFunds(p.campaignId, p.milestoneIndex, proposalId);
+        donationVault.approveMilestone(p.campaignId, p.milestoneIndex, proposalId);
         p.state = ProposalState.Executed;
         emit ProposalExecuted(proposalId);
     }

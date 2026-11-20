@@ -7,6 +7,7 @@ import "../src/DonationVault.sol";
 import "../src/GovernanceDAO.sol";
 import "../src/ImpactNFT.sol";
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "../src/DisbursementController.sol";
 
 contract MockUSDCBrief is ERC20 {
     constructor() ERC20("Mock USDC", "mUSDC") {}
@@ -21,12 +22,14 @@ contract BriefFixesTest is Test {
     GovernanceDAO dao;
     ImpactNFT nft;
     MockUSDCBrief usdc;
+    DisbursementController controller;
 
     address admin = address(0xA11CE);
     address org = address(0x01AC);
     address donor1 = address(0xD001);
     address donor2 = address(0xD002);
     address donor3 = address(0xD003);
+    address safe;
 
     uint256 constant GOAL = 2 ether;
     uint256 constant DEADLINE_OFFSET = 30 days;
@@ -43,6 +46,9 @@ contract BriefFixesTest is Test {
         core.setTrustedContracts(address(vault), address(dao));
         nft.setTrustedContracts(address(vault), address(core));
         core.verifyOrg(org);
+        safe = address(0x5AFE);
+        controller = new DisbursementController(admin, address(vault), address(core), safe);
+        vault.setDisbursementController(address(controller));
         vm.stopPrank();
 
         vm.deal(org, 10 ether);
@@ -81,6 +87,15 @@ contract BriefFixesTest is Test {
         dao.queueProposal(pid);
         vm.warp(block.timestamp + 86401);
         dao.executeProposal(pid);
+
+        // V2: Safe-gated payout after DAO approval
+        uint8 idx = dao.getProposal(pid).milestoneIndex;
+        vm.prank(org);
+        uint256 reqId = controller.requestDisbursement(
+            id, idx, keccak256("receipt"), "QmReceipt", uint64(block.timestamp + 7 days)
+        );
+        vm.prank(safe);
+        controller.executeDisbursement(reqId);
     }
 
     function test_1_goalReachedMilestonesIncomplete_cannotFinalize() public {
@@ -121,7 +136,7 @@ contract BriefFixesTest is Test {
         vault.submitMilestoneProof(id, 1, "QmProof1");
     }
 
-    function test_4_wrongProposalIdRelease_reverts() public {
+    function test_4_wrongProposalIdApprove_reverts() public {
         uint256 id = _createCampaign();
         vm.prank(donor1);
         vault.donate{value: 1 ether}(id);
@@ -131,7 +146,7 @@ contract BriefFixesTest is Test {
 
         vm.prank(address(dao));
         vm.expectRevert("Vault: wrong proposal");
-        vault.releaseMilestoneFunds(id, 0, 999);
+        vault.approveMilestone(id, 0, 999);
     }
 
     function test_5_daoQuorum_oneVoteNotEnough() public {

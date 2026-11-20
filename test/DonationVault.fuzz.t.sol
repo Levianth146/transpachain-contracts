@@ -6,6 +6,7 @@ import "../src/DonationVault.sol";
 import "../src/CharityCore.sol";
 import "../src/GovernanceDAO.sol";
 import "../src/ImpactNFT.sol";
+import "../src/DisbursementController.sol";
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
 contract MockUSDC is ERC20 {
@@ -27,10 +28,12 @@ contract DonationVaultFuzz is Test {
     GovernanceDAO dao;
     ImpactNFT nft;
     MockUSDC usdc;
+    DisbursementController controller;
 
     address admin = makeAddr("admin");
     address org = makeAddr("org");
     address treasury = makeAddr("treasury");
+    address safe;
 
     uint256 constant DEADLINE_OFFSET = 30 days;
     uint8 constant MILESTONES = 3;
@@ -56,6 +59,10 @@ contract DonationVaultFuzz is Test {
         nft.setTrustedContracts(address(vault), address(core));
         vault.setTreasury(treasury);
         core.verifyOrg(org);
+
+        safe = makeAddr("safe");
+        controller = new DisbursementController(admin, address(vault), address(core), safe);
+        vault.setDisbursementController(address(controller));
 
         vm.stopPrank();
 
@@ -97,7 +104,14 @@ contract DonationVaultFuzz is Test {
     function _releaseMilestone(uint256 cid, uint8 idx) internal {
         uint256 pid = vault.getMilestone(cid, idx).proposalId;
         vm.prank(address(dao));
-        vault.releaseMilestoneFunds(cid, idx, pid);
+        vault.approveMilestone(cid, idx, pid);
+        bytes32 receiptHash = keccak256("receipt");
+        vm.prank(org);
+        uint256 reqId = controller.requestDisbursement(
+            cid, idx, receiptHash, "QmReceipt", uint64(block.timestamp + 7 days)
+        );
+        vm.prank(safe);
+        controller.executeDisbursement(reqId);
     }
 
     function _donateETH(address donor, uint256 cid, uint256 amount) internal {

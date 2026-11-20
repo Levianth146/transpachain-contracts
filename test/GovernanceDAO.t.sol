@@ -7,6 +7,7 @@ import "../src/DonationVault.sol";
 import "../src/CharityCore.sol";
 import "../src/ImpactNFT.sol";
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "../src/DisbursementController.sol";
 
 // ─────────────────────────────────────────────
 // Mock USDC (6 decimals)
@@ -48,6 +49,8 @@ contract GovernanceDAOTest is Test {
     address donor3 = makeAddr("donor3");
     address treasury = makeAddr("treasury");
     address nobody = makeAddr("nobody");
+    address safe;
+    DisbursementController controller;
 
     uint256 constant GOAL = 10 ether;
     uint256 constant DEADLINE_OFFSET = 30 days;
@@ -81,6 +84,11 @@ contract GovernanceDAOTest is Test {
 
         // Verify org
         core.verifyOrg(org);
+
+        // V2: deploy DisbursementController
+        safe = makeAddr("safe");
+        controller = new DisbursementController(admin, address(vault), address(core), safe);
+        vault.setDisbursementController(address(controller));
 
         vm.stopPrank();
 
@@ -271,7 +279,7 @@ contract GovernanceDAOTest is Test {
         vm.prank(org);
         vault.submitMilestoneProof(cid, 0, "QmProof0");
 
-        // Release milestone 0 via full vote flow
+        // Approve milestone 0 via full vote flow
         uint256 pid1 = dao.getActiveProposal(cid);
         vm.prank(donor1);
         dao.castVote(pid1, IGovernanceDAO.VoteChoice.For);
@@ -279,6 +287,13 @@ contract GovernanceDAOTest is Test {
         dao.queueProposal(pid1);
         _advancePastTimelock();
         dao.executeProposal(pid1);
+
+        // V2: complete disbursement via controller (increments completedMilestones)
+        bytes32 rh = keccak256("receipt");
+        vm.prank(org);
+        uint256 reqId0 = controller.requestDisbursement(cid, 0, rh, "QmReceipt", uint64(block.timestamp + 7 days));
+        vm.prank(safe);
+        controller.executeDisbursement(reqId0);
 
         // Submit milestone 1
         vm.prank(org);
@@ -629,7 +644,10 @@ contract GovernanceDAOTest is Test {
 
         IGovernanceDAO.Proposal memory p = dao.getProposal(pid);
         assertEq(uint8(p.state), uint8(IGovernanceDAO.ProposalState.Executed));
-        assertTrue(org.balance > orgBalBefore);
+        // V2: executeProposal only approves milestone — no immediate fund transfer
+        assertTrue(vault.getMilestone(cid, 0).approved);
+        assertFalse(vault.getMilestone(cid, 0).released);
+        assertEq(org.balance, orgBalBefore); // org balance UNCHANGED until controller payout
     }
 
     function test_executeProposal_emitsProposalExecuted() public {
@@ -652,7 +670,7 @@ contract GovernanceDAOTest is Test {
         uint256 cid = _createCampaignETH();
         uint256 pid = _donateAndCreateProposal(cid, 5 ether);
 
-        uint256 releaseAmount = vault.getMilestone(cid, 0).releaseAmount;
+        uint256 escrowBefore = vault.getCampaignEscrowBalance(cid);
 
         vm.prank(donor1);
         dao.castVote(pid, IGovernanceDAO.VoteChoice.For);
@@ -664,7 +682,11 @@ contract GovernanceDAOTest is Test {
         uint256 orgBalBefore = org.balance;
         dao.executeProposal(pid);
 
-        assertEq(org.balance - orgBalBefore, releaseAmount);
+        // V2: approval-only — org balance unchanged, escrow unchanged, milestone approved
+        assertTrue(vault.getMilestone(cid, 0).approved);
+        assertFalse(vault.getMilestone(cid, 0).released);
+        assertEq(org.balance, orgBalBefore);
+        assertEq(vault.getCampaignEscrowBalance(cid), escrowBefore);
     }
 
     // ─── executeProposal revert cases ───
@@ -909,14 +931,24 @@ contract GovernanceDAOTest is Test {
         // 6. Advance past timelock
         _advancePastTimelock();
 
-        // 7. Execute proposal
-        uint256 orgBalBefore = org.balance;
+        // 7. Execute proposal (V2: approval only)
         dao.executeProposal(pid);
 
         assertEq(
             uint8(dao.getProposalState(pid)),
             uint8(IGovernanceDAO.ProposalState.Executed)
         );
+        assertTrue(vault.getMilestone(cid, 0).approved);
+        assertFalse(vault.getMilestone(cid, 0).released);
+
+        // 8. V2: complete disbursement via controller
+        uint256 orgBalBefore = org.balance;
+        bytes32 rh = keccak256("receipt");
+        vm.prank(org);
+        uint256 reqId = controller.requestDisbursement(cid, 0, rh, "QmReceipt", uint64(block.timestamp + 7 days));
+        vm.prank(safe);
+        controller.executeDisbursement(reqId);
+
         assertTrue(org.balance > orgBalBefore);
         assertTrue(vault.getMilestone(cid, 0).released);
     }

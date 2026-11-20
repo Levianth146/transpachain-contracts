@@ -8,6 +8,7 @@ import "../src/GovernanceDAO.sol";
 import "../src/ImpactNFT.sol";
 import { TranspaChainErrors } from "../src/Errors.sol";
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "../src/DisbursementController.sol";
 
 // ─────────────────────────────────────────────
 // Mock USDC (6 decimals)
@@ -58,6 +59,8 @@ contract DonationVaultTest is Test {
     address donor2 = makeAddr("donor2");
     address treasury = makeAddr("treasury");
     address nobody = makeAddr("nobody");
+    address safe;
+    DisbursementController controller;
 
     uint256 constant GOAL = 2 ether;
     uint256 constant DEADLINE_OFFSET = 30 days;
@@ -107,6 +110,11 @@ contract DonationVaultTest is Test {
 
         // Verify org
         core.verifyOrg(org);
+
+        // V2: deploy DisbursementController
+        safe = makeAddr("safe");
+        controller = new DisbursementController(admin, address(vault), address(core), safe);
+        vault.setDisbursementController(address(controller));
 
         vm.stopPrank();
 
@@ -160,7 +168,14 @@ contract DonationVaultTest is Test {
     function _releaseMilestone(uint256 cid, uint8 idx) internal {
         uint256 pid = vault.getMilestone(cid, idx).proposalId;
         vm.prank(address(dao));
-        vault.releaseMilestoneFunds(cid, idx, pid);
+        vault.approveMilestone(cid, idx, pid);
+        bytes32 receiptHash = keccak256("receipt");
+        vm.prank(org);
+        uint256 reqId = controller.requestDisbursement(
+            cid, idx, receiptHash, "QmReceipt", uint64(block.timestamp + 7 days)
+        );
+        vm.prank(safe);
+        controller.executeDisbursement(reqId);
     }
 
     // ─────────────────────────────────────────────
@@ -647,7 +662,6 @@ contract DonationVaultTest is Test {
         uint256 orgBalBefore = org.balance;
         uint256 releaseAmount = vault.getMilestone(cid, 0).releaseAmount;
 
-        vm.prank(address(dao));
         _releaseMilestone(cid, 0);
 
         assertEq(org.balance - orgBalBefore, releaseAmount);
@@ -668,7 +682,6 @@ contract DonationVaultTest is Test {
         uint256 orgBalBefore = usdc.balanceOf(org);
         uint256 releaseAmount = vault.getMilestone(cid, 0).releaseAmount;
 
-        vm.prank(address(dao));
         _releaseMilestone(cid, 0);
 
         assertEq(usdc.balanceOf(org) - orgBalBefore, releaseAmount);
@@ -686,7 +699,6 @@ contract DonationVaultTest is Test {
         uint256 escrowBefore = vault.getCampaignEscrowBalance(cid);
         uint256 releaseAmount = vault.getMilestone(cid, 0).releaseAmount;
 
-        vm.prank(address(dao));
         _releaseMilestone(cid, 0);
 
         assertEq(
@@ -706,11 +718,20 @@ contract DonationVaultTest is Test {
         vault.submitMilestoneProof(cid, 0, "QmProof0");
 
         uint256 releaseAmount = vault.getMilestone(cid, 0).releaseAmount;
+        uint256 pid = vault.getMilestone(cid, 0).proposalId;
 
         vm.prank(address(dao));
+        vault.approveMilestone(cid, 0, pid);
+
+        vm.prank(org);
+        uint256 reqId = controller.requestDisbursement(
+            cid, 0, keccak256("receipt"), "QmReceipt", uint64(block.timestamp + 7 days)
+        );
+
         vm.expectEmit(true, false, false, true);
         emit FundsReleased(cid, 0, releaseAmount, org);
-        _releaseMilestone(cid, 0);
+        vm.prank(safe);
+        controller.executeDisbursement(reqId);
     }
 
     function test_releaseMilestoneFunds_revertsIfNotDAO() public {
@@ -722,10 +743,11 @@ contract DonationVaultTest is Test {
         vm.prank(org);
         vault.submitMilestoneProof(cid, 0, "QmProof0");
 
+        // V2: approveMilestone reverts if not governance DAO
         uint256 pid = vault.getMilestone(cid, 0).proposalId;
         vm.expectRevert("Vault: only DAO");
         vm.prank(nobody);
-        vault.releaseMilestoneFunds(cid, 0, pid);
+        vault.approveMilestone(cid, 0, pid);
     }
 
     function test_releaseMilestoneFunds_revertsIfAlreadyReleased() public {
@@ -737,14 +759,12 @@ contract DonationVaultTest is Test {
         vm.prank(org);
         vault.submitMilestoneProof(cid, 0, "QmProof0");
 
-        vm.prank(address(dao));
         _releaseMilestone(cid, 0);
 
-        // Try to release again - should revert because released=true
-        uint256 pid = vault.getMilestone(cid, 0).proposalId;
-        vm.expectRevert("Vault: already released");
-        vm.prank(address(dao));
-        vault.releaseMilestoneFunds(cid, 0, pid);
+        // V2: after full release, requestDisbursement reverts "DC: milestone already released"
+        vm.expectRevert("DC: milestone already released");
+        vm.prank(org);
+        controller.requestDisbursement(cid, 0, keccak256("r"), "QmR", uint64(block.timestamp + 7 days));
     }
 
     function test_releaseMilestoneFunds_dividesEquallyAmongMilestones() public {
@@ -762,21 +782,18 @@ contract DonationVaultTest is Test {
         vault.submitMilestoneProof(cid, 0, "QmP0");
         assertEq(vault.getMilestone(cid, 0).releaseAmount, perMilestone);
 
-        vm.prank(address(dao));
         _releaseMilestone(cid, 0);
 
         // Submit and release milestone 1
         vm.prank(org);
         vault.submitMilestoneProof(cid, 1, "QmP1");
 
-        vm.prank(address(dao));
         _releaseMilestone(cid, 1);
 
         // Submit and release milestone 2
         vm.prank(org);
         vault.submitMilestoneProof(cid, 2, "QmP2");
 
-        vm.prank(address(dao));
         _releaseMilestone(cid, 2);
 
         // Escrow should be 0 (or near 0 due to rounding)
@@ -898,7 +915,6 @@ contract DonationVaultTest is Test {
         // Release milestone 0
         vm.prank(org);
         vault.submitMilestoneProof(cid, 0, "QmP0");
-        vm.prank(address(dao));
         _releaseMilestone(cid, 0);
 
         // Fail the campaign via admin cancel (goal may be reached after partial release)

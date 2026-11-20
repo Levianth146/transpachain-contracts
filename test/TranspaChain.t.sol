@@ -6,6 +6,7 @@ import "../src/CharityCore.sol";
 import "../src/DonationVault.sol";
 import "../src/GovernanceDAO.sol";
 import "../src/ImpactNFT.sol";
+import "../src/DisbursementController.sol";
 import { TranspaChainErrors } from "../src/Errors.sol";
 
 /// @dev Minimal ERC-20 mock for USDC tests
@@ -65,12 +66,14 @@ contract TranspaChainTest is Test {
     GovernanceDAO dao;
     ImpactNFT nft;
     MockERC20 usdc;
+    DisbursementController controller;
 
     address admin = address(0xA11CE);
     address org = address(0x01AC);
     address donor1 = address(0xD001);
     address donor2 = address(0xD002);
     address random = address(0xBEEF);
+    address safe;
 
     uint256 constant GOAL = 2 ether;
 
@@ -104,6 +107,11 @@ contract TranspaChainTest is Test {
         // 3. Verify org
         core.verifyOrg(org);
 
+        // V2: DisbursementController
+        safe = address(0x5AFE);
+        controller = new DisbursementController(admin, address(vault), address(core), safe);
+        vault.setDisbursementController(address(controller));
+
         vm.stopPrank();
 
         // Fund actors
@@ -131,7 +139,14 @@ contract TranspaChainTest is Test {
     function _releaseMilestone(uint256 id, uint8 idx) internal {
         uint256 pid = vault.getMilestone(id, idx).proposalId;
         vm.prank(address(dao));
-        vault.releaseMilestoneFunds(id, idx, pid);
+        vault.approveMilestone(id, idx, pid);
+        bytes32 receiptHash = keccak256("receipt");
+        vm.prank(org);
+        uint256 reqId = controller.requestDisbursement(
+            id, idx, receiptHash, "QmReceipt", uint64(block.timestamp + 7 days)
+        );
+        vm.prank(safe);
+        controller.executeDisbursement(reqId);
     }
 
     function _createUSDCampaign() internal returns (uint256 campaignId) {
@@ -685,13 +700,25 @@ contract TranspaChainTest is Test {
         // Advance past timelock
         vm.warp(block.timestamp + 86401);
 
-        // Execute
+        // Execute DAO → approve only (V2)
         dao.executeProposal(proposalId);
 
         assertEq(
             uint8(dao.getProposalState(proposalId)),
             uint8(IGovernanceDAO.ProposalState.Executed)
         );
+
+        m = vault.getMilestone(id, 0);
+        assertTrue(m.approved);
+        assertFalse(m.released);
+
+        // Safe-gated payout
+        vm.prank(org);
+        uint256 reqId = controller.requestDisbursement(
+            id, 0, keccak256("receipt"), "QmReceipt", uint64(block.timestamp + 7 days)
+        );
+        vm.prank(safe);
+        controller.executeDisbursement(reqId);
 
         m = vault.getMilestone(id, 0);
         assertTrue(m.released);
@@ -863,7 +890,7 @@ contract TranspaChainTest is Test {
     // Access control
     // =========================================================
 
-    function testRevert_ReleaseFundsNotDAO() public {
+    function testRevert_ApproveMilestoneNotDAO() public {
         uint256 id = _createCampaign();
 
         vm.prank(donor1);
@@ -875,7 +902,12 @@ contract TranspaChainTest is Test {
         uint256 pid = vault.getMilestone(id, 0).proposalId;
         vm.expectRevert("Vault: only DAO");
         vm.prank(random);
-        vault.releaseMilestoneFunds(id, 0, pid);
+        vault.approveMilestone(id, 0, pid);
+    }
+
+    function testRevert_LegacyReleasePathRemoved() public {
+        vm.expectRevert("Vault: removed");
+        vault.releaseMilestoneFunds(1, 0, 1);
     }
 
     function testRevert_MintNFTNotVault() public {
