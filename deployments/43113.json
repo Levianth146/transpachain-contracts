@@ -41,6 +41,39 @@
       "safe": null,
       "yieldVault": null,
       "note": "Pre-Module-A/C baseline. Superseded by v2 after PR-02/05 redeploy."
+    },
+    "v2": {
+      "version": "2",
+      "deployBlock": 61364951,
+      "deployedAt": "2026-11-20",
+      "governance": {
+        "votingPeriodSeconds": 300,
+        "timelockSeconds": 120
+      },
+      "contracts": {
+        "CharityCore": "0xFc71b91e360DB771F81aD3594023Be35D85C613b",
+        "DonationVault": "0x671bE113Cd8C1981D19910Bea2718aa73DC83D5b",
+        "GovernanceDAO": "0xC8f15c5eE83998897615b851a03f044712b0e016",
+        "ImpactNFT": "0x0fA0613bD0Ef0520851f1F515C894D7D80Df2210",
+        "DisbursementController": "0xb61c688D64564960958181Dfc5cD4164730125E6",
+        "YieldManager": "0x64b5B7e14000FFAF68f84f11Ec4685812eC9deF9",
+        "MockERC4626Vault": "0xDefbf3f47c1e15bb4A875daADbB469Fa115bC75A"
+      },
+      "safe": {
+        "address": "0xf2dD6eF266E9775a9fC9Cf934b3bC2680076737A",
+        "owners": [
+          "0xBD2975D8b1a923F1ad80046791BF4cC5570d616b",
+          "0x7f9D86Eeaf8945ae5dcDe46E65DE983849A9C7EA",
+          "0xa55775d724c2E4fc55F17064aF2D312719af216A",
+          "0x7f03D60375DE680c55FC08dD48EA0D4B449eabDD",
+          "0x65df0138B3D622084B2803381D341249260fDe84"
+        ],
+        "threshold": 3
+      },
+      "yieldVault": "0xDefbf3f47c1e15bb4A875daADbB469Fa115bC75A",
+      "lossSink": "0x000000000000000000000000000000000000dEaD",
+      "yieldController": "0x11A82cAf925805D8B0dDc7Fbf912bf93d3F21813",
+      "note": "V2: DAO approve-only + DisbursementController (Safe 3/5) + YieldManager/MockERC4626."
     }
   }
 }
