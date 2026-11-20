@@ -7,3 +7,6 @@ typechain-types/
 .env
 package-lock.json
 tsconfig.json
+
+# E2E demo wallets (testnet keys, never commit)
+*.local.json
