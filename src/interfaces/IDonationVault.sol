@@ -15,6 +15,12 @@ interface IDonationVault {
     event MaxRefundPeriodUpdated(uint256 newPeriod);
     /// @notice Emitted when DAO approves a milestone (approval only, no transfer)
     event MilestoneApproved(uint256 indexed campaignId, uint8 milestoneIndex, uint256 proposalId, uint256 amount);
+    /// @notice Liquid escrow moved to YieldManager (donor balances unchanged)
+    event MovedToYield(uint256 indexed campaignId, uint256 assets);
+    /// @notice Assets returned from YieldManager into liquid escrow
+    event ReceivedFromYield(uint256 indexed campaignId, uint256 assets);
+    /// @notice Yield fully settled into escrow so refunds may proceed
+    event RefundSettlementFinalized(uint256 indexed campaignId, uint256 assetsReturned, int256 realizedPnl);
 
     function donate(uint256 campaignId) external payable;
     function donateUSDC(uint256 campaignId, uint256 amount) external;
@@ -31,6 +37,13 @@ interface IDonationVault {
 
     function claimRefund(uint256 campaignId) external;
     function emergencyRefundBatch(uint256 campaignId, uint256 offset, uint256 limit) external;
+
+    /// @dev V2 Module C: YieldManager moves liquid ↔ invested
+    function moveToYield(uint256 campaignId, uint256 assets) external;
+    function receiveFromYield(uint256 campaignId, uint256 assets) external;
+    /// @dev Permissionless settle before refunds when shares remain
+    function settleYieldForRefund(uint256 campaignId) external;
+    function getInvestedBalance(uint256 campaignId) external view returns (uint256);
     function setTreasury(address newTreasury) external;
     function setMaxRefundPeriod(uint256 newPeriod) external;
     function updatePlatformFee(uint256 newFeeBps) external;

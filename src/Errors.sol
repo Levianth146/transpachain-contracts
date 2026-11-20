@@ -25,4 +25,14 @@ library TranspaChainErrors {
     error RequestNotPending();
     error ExpiredRequest();
     error PendingRequestExists();
+    // V2 Module C: Yield Treasury
+    error OnlyYieldManager();
+    error RefundPendingLiquidity();
+    error YieldPaused();
+    error YieldNotEnabled();
+    error ExceedsInvestable();
+    error SlippageTooHigh();
+    error NotAuthorized();
+    error NotUSDCCampaign();
+    error NothingToRedeem();
 }

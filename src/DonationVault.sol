@@ -9,6 +9,7 @@ import "./interfaces/IDonationVault.sol";
 import "./interfaces/ICharityCore.sol";
 import "./interfaces/IGovernanceDAO.sol";
 import "./interfaces/IImpactNFT.sol";
+import "./interfaces/IYieldManager.sol";
 import { TranspaChainErrors } from "./Errors.sol";
 
 /// @title DonationVault
@@ -48,14 +49,16 @@ contract DonationVault is IDonationVault, ReentrancyGuard, Ownable {
     /// @notice V2: DisbursementController that calls payoutMilestone (set once)
     address public disbursementController;
 
-    /// @notice V2: YieldManager stub (address(0) until T2)
+    /// @notice V2: YieldManager (address(0) until wired)
     address public yieldManager;
 
     mapping(uint256 => mapping(address => uint256)) private _donorBalances;
     mapping(uint256 => uint256)                     private _escrowBalances;
+    /// @notice Cost-basis of funds currently in YieldManager per campaign (synced to position.principal)
+    mapping(uint256 => uint256)                     private _investedBalances;
     mapping(uint256 => mapping(uint8 => Milestone)) private _milestones;
     uint256 private _totalEscrow;
-  mapping(uint256 => uint256) private _totalDeposited;
+    mapping(uint256 => uint256) private _totalDeposited;
     mapping(uint256 => uint256) private _remainingRefundWeight;
 
     mapping(uint256 => mapping(address => DonorInfo)) private _donorInfo;
@@ -72,6 +75,13 @@ contract DonationVault is IDonationVault, ReentrancyGuard, Ownable {
 
     modifier onlyDisbursementController() {
         if (msg.sender != disbursementController) revert TranspaChainErrors.NotController();
+        _;
+    }
+
+    modifier onlyYieldManager() {
+        if (msg.sender != yieldManager || yieldManager == address(0)) {
+            revert TranspaChainErrors.OnlyYieldManager();
+        }
         _;
     }
 
@@ -202,7 +212,9 @@ contract DonationVault is IDonationVault, ReentrancyGuard, Ownable {
         require(bytes(proofCID).length > 0, "Vault: empty proof");
         require(idx < c.totalMilestones, "Vault: invalid milestone");
         require(idx == c.completedMilestones, "Vault: wrong order");
-        require(_escrowBalances[campaignId] > 0, "Vault: empty escrow");
+
+        uint256 bookValue = _campaignBookValue(campaignId);
+        require(bookValue > 0, "Vault: empty escrow");
 
         Milestone storage m = _milestones[campaignId][idx];
         require(!m.released, "Vault: already released");
@@ -216,7 +228,8 @@ contract DonationVault is IDonationVault, ReentrancyGuard, Ownable {
         }
 
         uint256 remaining = c.totalMilestones - c.completedMilestones;
-        m.releaseAmount   = remaining > 0 ? _escrowBalances[campaignId] / remaining : 0;
+        // Yield-enabled USDC campaigns book release against liquid + mark-to-market yield value
+        m.releaseAmount   = remaining > 0 ? bookValue / remaining : 0;
         m.proofCID        = proofCID;
         m.proposalId      = governanceDAO.createProposal(campaignId, idx, proofCID);
 
@@ -291,6 +304,8 @@ contract DonationVault is IDonationVault, ReentrancyGuard, Ownable {
             "Vault: not refundable"
         );
 
+        _requireYieldSettledForRefund(campaignId);
+
         uint256 donorBalance = _donorBalances[campaignId][msg.sender];
         require(donorBalance > 0, "Vault: nothing to refund");
 
@@ -322,6 +337,8 @@ contract DonationVault is IDonationVault, ReentrancyGuard, Ownable {
                 c.status == ICharityCore.CampaignStatus.Cancelled,
             "Vault: not refundable"
         );
+
+        _requireYieldSettledForRefund(campaignId);
 
         address[] storage donorList = _donorList[campaignId];
         uint256 end = offset + limit;
@@ -380,13 +397,70 @@ contract DonationVault is IDonationVault, ReentrancyGuard, Ownable {
         disbursementController = controller;
     }
 
-    /// @notice V2: set YieldManager — owner-only, can be updated (T2 preparation).
+    /// @notice V2: set YieldManager — owner-only, can be updated.
     function setYieldManager(address manager) external onlyOwner {
         yieldManager = manager;
     }
 
+    /// @notice Move liquid escrow → invested bucket and transfer USDC to YieldManager.
+    /// @dev Donor balances / raised / NFT / votes unchanged.
+    ///      Not `nonReentrant`: YieldManager (sole caller) already guards; settleYieldForRefund
+    ///      must be able to re-enter via redeemAll → receiveFromYield on the same vault.
+    function moveToYield(uint256 campaignId, uint256 assets) external onlyYieldManager {
+        if (assets == 0) revert TranspaChainErrors.ZeroAmount();
+        if (_escrowBalances[campaignId] < assets) revert TranspaChainErrors.InsufficientEscrow();
+
+        _escrowBalances[campaignId]  -= assets;
+        _totalEscrow                 -= assets;
+        _investedBalances[campaignId] += assets;
+
+        usdcToken.safeTransfer(msg.sender, assets);
+        emit MovedToYield(campaignId, assets);
+    }
+
+    /// @notice Credit liquid escrow from YieldManager; sync invested to remaining principal.
+    /// @dev See `moveToYield` reentrancy note — YieldManager is the only caller and is nonReentrant.
+    function receiveFromYield(uint256 campaignId, uint256 assets) external onlyYieldManager {
+        if (assets == 0) revert TranspaChainErrors.ZeroAmount();
+
+        usdcToken.safeTransferFrom(msg.sender, address(this), assets);
+
+        // Sync invested bucket to YieldManager principal (already updated before this call)
+        _investedBalances[campaignId] = IYieldManager(msg.sender).getPosition(campaignId).principal;
+
+        _escrowBalances[campaignId] += assets;
+        _totalEscrow                += assets;
+
+        emit ReceivedFromYield(campaignId, assets);
+    }
+
+    /// @notice Permissionless: redeem all yield shares into escrow before refunds.
+    /// @dev May be called repeatedly if the ERC-4626 withdraw cap blocks a full exit.
+    function settleYieldForRefund(uint256 campaignId) external {
+        ICharityCore.Campaign memory c = charityCore.getCampaign(campaignId);
+        require(
+            c.status == ICharityCore.CampaignStatus.Failed ||
+                c.status == ICharityCore.CampaignStatus.Cancelled,
+            "Vault: not refundable"
+        );
+        if (yieldManager == address(0)) revert TranspaChainErrors.ZeroAddress();
+
+        IYieldManager.Position memory pos = IYieldManager(yieldManager).getPosition(campaignId);
+        if (pos.shares == 0) revert TranspaChainErrors.NothingToRedeem();
+
+        int256 pnlBefore = pos.realizedPnl;
+        uint256 got = IYieldManager(yieldManager).redeemAll(campaignId);
+        int256 pnlAfter = IYieldManager(yieldManager).getPosition(campaignId).realizedPnl;
+
+        emit RefundSettlementFinalized(campaignId, got, pnlAfter - pnlBefore);
+    }
+
     function getDonorAmount(uint256 cid, address d) external view returns (uint256) {
         return _donorBalances[cid][d];
+    }
+
+    function getInvestedBalance(uint256 campaignId) external view returns (uint256) {
+        return _investedBalances[campaignId];
     }
 
     function getDonorInfo(uint256 cid, address donor) external view returns (DonorInfo memory) {
@@ -469,6 +543,23 @@ contract DonationVault is IDonationVault, ReentrancyGuard, Ownable {
         if (remainingWeight == 0) return 0;
 
         return (donorBalance * escrow) / remainingWeight;
+    }
+
+    /// @dev Liquid + MTM yield when yield is enabled for the campaign; else liquid only.
+    function _campaignBookValue(uint256 campaignId) internal view returns (uint256) {
+        uint256 liquid = _escrowBalances[campaignId];
+        if (yieldManager == address(0)) return liquid;
+
+        IYieldManager.Position memory pos = IYieldManager(yieldManager).getPosition(campaignId);
+        if (!pos.enabled) return liquid;
+
+        return liquid + IYieldManager(yieldManager).positionValue(campaignId);
+    }
+
+    function _requireYieldSettledForRefund(uint256 campaignId) internal view {
+        if (yieldManager == address(0)) return;
+        IYieldManager.Position memory pos = IYieldManager(yieldManager).getPosition(campaignId);
+        if (pos.shares > 0) revert TranspaChainErrors.RefundPendingLiquidity();
     }
 
     function _recordDonor(uint256 cid, address donor, uint256 amount) internal {
