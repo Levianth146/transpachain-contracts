@@ -6,7 +6,8 @@ import path from "path";
 dotenv.config({ path: path.resolve(__dirname, ".env") });
 
 const PRIVATE_KEY   = process.env.DEPLOYER_PRIVATE_KEY ?? "0x" + "0".repeat(64);
-const SEPOLIA_URL   = process.env.ALCHEMY_SEPOLIA_URL  ?? "";
+const SEPOLIA_URL   = process.env.SEPOLIA_RPC_URL ?? process.env.ALCHEMY_SEPOLIA_URL ?? "";
+const FUJI_URL      = process.env.FUJI_RPC_URL ?? "https://api.avax-test.network/ext/bc/C/rpc";
 const ETHERSCAN_KEY = process.env.ETHERSCAN_API_KEY    ?? "";
 
 const config: HardhatUserConfig = {
@@ -16,12 +17,17 @@ const config: HardhatUserConfig = {
         version: "0.8.25",
         settings: {
           optimizer: { enabled: true, runs: 200 },
-          evmVersion: "cancun",
+          evmVersion: "cancun", // Avalanche C-Chain supports Cancun EIPs since Etna (ACP-131),
         },
       },
     ],
   },
   networks: {
+    fuji: {
+      url: FUJI_URL,
+      accounts: [PRIVATE_KEY],
+      chainId: 43113,
+    },
     sepolia: {
       url: SEPOLIA_URL,
       accounts: [PRIVATE_KEY],
@@ -29,7 +35,17 @@ const config: HardhatUserConfig = {
     },
   },
   etherscan: {
-    apiKey: ETHERSCAN_KEY,
+    apiKey: { fuji: "verifyContract", sepolia: ETHERSCAN_KEY },
+    customChains: [
+      {
+        network: "fuji",
+        chainId: 43113,
+        urls: {
+          apiURL: "https://api.routescan.io/v2/network/testnet/evm/43113/etherscan",
+          browserURL: "https://testnet.snowtrace.io",
+        },
+      },
+    ],
   },
   paths: {
     sources:   "./src",

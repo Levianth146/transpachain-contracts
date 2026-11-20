@@ -14,12 +14,19 @@ import "./interfaces/IDonationVault.sol";
 ///      Admin approval gate: off-chain (backend) before public listing
 ///      closeProposal: owner or verifier can halt manipulation
 contract GovernanceDAO is IGovernanceDAO, Ownable, Pausable {
-    uint256 public constant VOTING_PERIOD = 21600; // ~3 days at 12s/block
-    uint256 public constant TIMELOCK_DELAY = 86400; // 24 hours in seconds
+    /// @dev Avalanche produces blocks only when there are transactions, so all
+    ///      governance windows are measured in seconds (block.timestamp), not blocks.
+    uint256 public constant DEFAULT_VOTING_PERIOD = 3 days;
+    uint256 public constant DEFAULT_TIMELOCK_DELAY = 24 hours;
+    uint256 public constant MIN_PERIOD = 60; // 1 minute floor (demo-friendly)
+    uint256 public constant MAX_VOTING_PERIOD = 30 days;
+    uint256 public constant MAX_TIMELOCK_DELAY = 7 days;
     uint256 public constant QUORUM_BPS = 5100; // 51.00%
 
     IDonationVault public donationVault;
     address public verifier;
+    uint256 public votingPeriod = DEFAULT_VOTING_PERIOD;
+    uint256 public timelockDelay = DEFAULT_TIMELOCK_DELAY;
 
     uint256 private _proposalCounter;
     mapping(uint256 => Proposal) private _proposals;
@@ -52,6 +59,16 @@ contract GovernanceDAO is IGovernanceDAO, Ownable, Pausable {
     function setVerifier(address _verifier) external onlyOwner {
         require(_verifier != address(0), "DAO: zero address");
         verifier = _verifier;
+    }
+
+    /// @notice Owner can shorten windows for testnet demos. Applies to proposals
+    ///         created (voting) / queued (timelock) after the change.
+    function setGovernancePeriods(uint256 _votingPeriod, uint256 _timelockDelay) external onlyOwner {
+        require(_votingPeriod >= MIN_PERIOD && _votingPeriod <= MAX_VOTING_PERIOD, "DAO: bad voting period");
+        require(_timelockDelay >= MIN_PERIOD && _timelockDelay <= MAX_TIMELOCK_DELAY, "DAO: bad timelock");
+        votingPeriod = _votingPeriod;
+        timelockDelay = _timelockDelay;
+        emit GovernancePeriodsUpdated(_votingPeriod, _timelockDelay);
     }
 
     function pause() external onlyOwner {
@@ -92,7 +109,7 @@ contract GovernanceDAO is IGovernanceDAO, Ownable, Pausable {
             proofCID: proofCID,
             proposer: proposer,
             startBlock: block.number,
-            endBlock: block.number + VOTING_PERIOD,
+            endTime: block.timestamp + votingPeriod,
             forVotes: 0,
             againstVotes: 0,
             abstainVotes: 0,
@@ -107,7 +124,7 @@ contract GovernanceDAO is IGovernanceDAO, Ownable, Pausable {
             campaignId,
             milestoneIndex,
             proofCID,
-            block.number + VOTING_PERIOD
+            block.timestamp + votingPeriod
         );
 
         _campaignProposals[campaignId].push(proposalId);
@@ -133,7 +150,7 @@ contract GovernanceDAO is IGovernanceDAO, Ownable, Pausable {
     ) external proposalExists(proposalId) {
         Proposal storage p = _proposals[proposalId];
         require(p.state == ProposalState.Active, "DAO: not active");
-        require(block.number <= p.endBlock, "DAO: voting ended");
+        require(block.timestamp <= p.endTime, "DAO: voting ended");
         require(!_hasVoted[proposalId][msg.sender], "DAO: already voted");
 
         uint256 linearAmount = donationVault.getDonorAmount(
@@ -158,7 +175,7 @@ contract GovernanceDAO is IGovernanceDAO, Ownable, Pausable {
     ) external proposalExists(proposalId) {
         Proposal storage p = _proposals[proposalId];
         require(p.state == ProposalState.Active, "DAO: not active");
-        require(block.number > p.endBlock, "DAO: voting ongoing");
+        require(block.timestamp > p.endTime, "DAO: voting ongoing");
 
         uint256 totalCast = p.forVotes + p.againstVotes + p.abstainVotes;
         bool quorumMet = totalCast > 0 &&
@@ -168,7 +185,7 @@ contract GovernanceDAO is IGovernanceDAO, Ownable, Pausable {
 
         if (quorumMet && majorityFor) {
             p.state = ProposalState.Queued;
-            p.executeAfter = block.timestamp + TIMELOCK_DELAY;
+            p.executeAfter = block.timestamp + timelockDelay;
             emit ProposalQueued(proposalId, p.executeAfter);
         } else {
             p.state = ProposalState.Defeated;

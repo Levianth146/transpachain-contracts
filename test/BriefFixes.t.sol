@@ -77,7 +77,7 @@ contract BriefFixesTest is Test {
             vm.prank(voters[i]);
             dao.castVote(pid, IGovernanceDAO.VoteChoice.For);
         }
-        vm.roll(block.number + 21601);
+        vm.warp(block.timestamp + 3 days + 1); // past voting window (timestamp-based)
         dao.queueProposal(pid);
         vm.warp(block.timestamp + 86401);
         dao.executeProposal(pid);
@@ -150,7 +150,7 @@ contract BriefFixesTest is Test {
         vm.prank(donor1);
         dao.castVote(pid, IGovernanceDAO.VoteChoice.For);
 
-        vm.roll(block.number + 21601);
+        vm.warp(block.timestamp + 3 days + 1); // past voting window (timestamp-based)
         dao.queueProposal(pid);
 
         assertEq(

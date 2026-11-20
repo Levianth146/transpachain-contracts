@@ -616,7 +616,7 @@ contract DonationVaultTest is Test {
         dao.castVote(pid, IGovernanceDAO.VoteChoice.For);
         vm.prank(donor2);
         dao.castVote(pid, IGovernanceDAO.VoteChoice.Against);
-        vm.roll(block.number + 21601);
+        vm.warp(block.timestamp + 3 days + 1); // past voting window (timestamp-based)
         dao.queueProposal(pid);
         assertEq(
             uint8(dao.getProposalState(pid)),

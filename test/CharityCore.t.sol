@@ -145,6 +145,7 @@ contract CharityCoreTest is Test {
     }
 
     function test_createCampaign_revertsIfNotVerified() public {
+        vm.deal(nobody, 1 ether); // fund caller so the revert comes from onlyVerifiedOrg, not insufficient balance
         vm.prank(nobody);
         vm.expectRevert();
         core.createCampaign{value: 0.001 ether}(

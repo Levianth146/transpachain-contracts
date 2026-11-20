@@ -1,11 +1,11 @@
 {
   "name": "TranspaChain Impact — Silver",
-  "description": "Retro synthwave silver donor badge. Earned for meaningful contributions on Sepolia.",
+  "description": "Retro synthwave silver donor badge. Earned for meaningful contributions on Avalanche.",
   "image": "https://gateway.pinata.cloud/ipfs/<IMAGE_CID_SET_BY_SCRIPT>",
   "external_url": "https://transpachain.site",
   "attributes": [
     { "trait_type": "Tier", "value": "Silver" },
     { "trait_type": "Style", "value": "Retro Synthwave" },
-    { "trait_type": "Network", "value": "Sepolia" }
+    { "trait_type": "Network", "value": "Avalanche Fuji" }
   ]
 }

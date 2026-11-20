@@ -162,6 +162,7 @@ contract TranspaChainTest is Test {
     }
 
     function testRevert_CreateCampaignNotVerifiedOrg() public {
+        vm.deal(random, 1 ether); // fund caller so the revert comes from onlyVerifiedOrg, not insufficient balance
         vm.prank(random);
         vm.expectRevert();
         core.createCampaign{value: 0.001 ether}(
@@ -672,7 +673,7 @@ contract TranspaChainTest is Test {
         assertTrue(dao.hasVoted(proposalId, donor2));
 
         // Advance past voting period
-        vm.roll(block.number + 21601);
+        vm.warp(block.timestamp + 3 days + 1); // past voting window (timestamp-based)
 
         // Queue
         dao.queueProposal(proposalId);
@@ -717,7 +718,7 @@ contract TranspaChainTest is Test {
         dao.castVote(proposalId, IGovernanceDAO.VoteChoice.Against);
 
         // Advance past voting period
-        vm.roll(block.number + 21601);
+        vm.warp(block.timestamp + 3 days + 1); // past voting window (timestamp-based)
 
         // Queue → should be defeated
         dao.queueProposal(proposalId);
@@ -747,7 +748,7 @@ contract TranspaChainTest is Test {
         vm.prank(donor2);
         dao.castVote(proposalId, IGovernanceDAO.VoteChoice.Against);
 
-        vm.roll(block.number + 21601);
+        vm.warp(block.timestamp + 3 days + 1); // past voting window (timestamp-based)
 
         dao.queueProposal(proposalId);
         assertEq(
@@ -795,7 +796,7 @@ contract TranspaChainTest is Test {
         vm.prank(donor2);
         dao.castVote(oldProposalId, IGovernanceDAO.VoteChoice.Against);
 
-        vm.roll(block.number + 21601);
+        vm.warp(block.timestamp + 3 days + 1); // past voting window (timestamp-based)
         dao.queueProposal(oldProposalId);
 
         vm.prank(org);

@@ -5,7 +5,7 @@ pragma solidity ^0.8.20;
 /// @notice Interface for milestone approval voting
 /// @dev Voting power = ETH donated to that specific campaign
 ///      Quorum = 51% of cast vote weight among participating voters
-///      Voting period = 3 days (configurable)
+///      Voting period = 3 days by default, owner-configurable (timestamp-based)
 ///      Timelock = 24h before execution (anti flash-loan)
 interface IGovernanceDAO {
     // ─────────────────────────────────────────────
@@ -34,7 +34,7 @@ interface IGovernanceDAO {
         string proofCID;
         address proposer;
         uint256 startBlock;
-        uint256 endBlock;
+        uint256 endTime; // unix timestamp (seconds) — voting closes after this
         uint256 forVotes; // wei-denominated voting power
         uint256 againstVotes;
         uint256 abstainVotes;
@@ -53,8 +53,9 @@ interface IGovernanceDAO {
         uint256 indexed campaignId,
         uint8 milestoneIndex,
         string proofCID,
-        uint256 endBlock
+        uint256 endTime
     );
+    event GovernancePeriodsUpdated(uint256 votingPeriod, uint256 timelockDelay);
     event VoteCast(
         uint256 indexed proposalId,
         address indexed voter,

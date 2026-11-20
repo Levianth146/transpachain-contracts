@@ -27,7 +27,7 @@ contract MockUSDC is ERC20 {
 // Test suite
 // ─────────────────────────────────────────────
 contract GovernanceDAOTest is Test {
-    event ProposalCreated(uint256 indexed proposalId, uint256 indexed campaignId, uint8 milestoneIndex, string proofCID, uint256 endBlock);
+    event ProposalCreated(uint256 indexed proposalId, uint256 indexed campaignId, uint8 milestoneIndex, string proofCID, uint256 endTime);
     event VoteCast(uint256 indexed proposalId, address indexed voter, IGovernanceDAO.VoteChoice choice, uint256 weight);
     event ProposalQueued(uint256 indexed proposalId, uint256 executeAfter);
     event ProposalExecuted(uint256 indexed proposalId);
@@ -52,7 +52,7 @@ contract GovernanceDAOTest is Test {
     uint256 constant GOAL = 10 ether;
     uint256 constant DEADLINE_OFFSET = 30 days;
     uint8 constant MILESTONES = 3;
-    uint256 constant VOTING_PERIOD = 21600;
+    uint256 constant VOTING_PERIOD = 3 days;
     uint256 constant TIMELOCK_DELAY = 86400;
 
     function setUp() public {
@@ -149,7 +149,7 @@ contract GovernanceDAOTest is Test {
     }
 
     function _advancePastVotingPeriod() internal {
-        vm.roll(block.number + VOTING_PERIOD + 1);
+        vm.warp(block.timestamp + VOTING_PERIOD + 1);
     }
 
     function _advancePastTimelock() internal {
@@ -165,8 +165,8 @@ contract GovernanceDAOTest is Test {
     }
 
     function test_constructor_setsConstants() public {
-        assertEq(VOTING_PERIOD, 21600);
-        assertEq(TIMELOCK_DELAY, 86400);
+        assertEq(dao.votingPeriod(), VOTING_PERIOD);
+        assertEq(dao.timelockDelay(), TIMELOCK_DELAY);
         assertEq(dao.QUORUM_BPS(), 5100);
     }
 
@@ -235,7 +235,7 @@ contract GovernanceDAOTest is Test {
         assertEq(p.milestoneIndex, 0);
         assertEq(p.proofCID, "QmProof0");
         assertEq(p.startBlock, block.number);
-        assertEq(p.endBlock, block.number + VOTING_PERIOD);
+        assertEq(p.endTime, block.timestamp + VOTING_PERIOD);
         assertEq(p.forVotes, 0);
         assertEq(p.againstVotes, 0);
         assertEq(p.abstainVotes, 0);
@@ -257,7 +257,7 @@ contract GovernanceDAOTest is Test {
             cid,
             0,
             "QmProof0",
-            block.number + VOTING_PERIOD
+            block.timestamp + VOTING_PERIOD
         );
         vault.submitMilestoneProof(cid, 0, "QmProof0");
     }
@@ -983,13 +983,13 @@ contract GovernanceDAOTest is Test {
     // Edge cases
     // ─────────────────────────────────────────────
 
-    function test_castVote_exactEndBlock_stillAllowed() public {
+    function test_castVote_exactEndTime_stillAllowed() public {
         uint256 cid = _createCampaignETH();
         uint256 pid = _donateAndCreateProposal(cid, 1 ether);
 
-        // Roll to exact endBlock (should still be allowed: block.number <= endBlock)
+        // Warp to exact endTime (still allowed: block.timestamp <= endTime)
         IGovernanceDAO.Proposal memory p = dao.getProposal(pid);
-        vm.roll(p.endBlock);
+        vm.warp(p.endTime);
 
         vm.prank(donor1);
         dao.castVote(pid, IGovernanceDAO.VoteChoice.For);
@@ -997,12 +997,12 @@ contract GovernanceDAOTest is Test {
         assertTrue(dao.hasVoted(pid, donor1));
     }
 
-    function test_castVote_onePastEndBlock_reverts() public {
+    function test_castVote_onePastEndTime_reverts() public {
         uint256 cid = _createCampaignETH();
         uint256 pid = _donateAndCreateProposal(cid, 1 ether);
 
         IGovernanceDAO.Proposal memory p = dao.getProposal(pid);
-        vm.roll(p.endBlock + 1);
+        vm.warp(p.endTime + 1);
 
         vm.prank(donor1);
         vm.expectRevert("DAO: voting ended");
@@ -1161,5 +1161,53 @@ contract GovernanceDAOTest is Test {
         uint256 w = dao.quadraticWeight(amount);
         assertGt(w, 0);
         assertLe(w, amount);
+    }
+
+    // ─────────────────────────────────────────────
+    // Configurable governance periods (Avalanche demo support)
+    // ─────────────────────────────────────────────
+
+    function test_setGovernancePeriods_ownerCanShorten() public {
+        vm.prank(admin);
+        dao.setGovernancePeriods(5 minutes, 2 minutes);
+        assertEq(dao.votingPeriod(), 5 minutes);
+        assertEq(dao.timelockDelay(), 2 minutes);
+    }
+
+    function test_setGovernancePeriods_revertsForNonOwner() public {
+        vm.prank(nobody);
+        vm.expectRevert();
+        dao.setGovernancePeriods(5 minutes, 2 minutes);
+    }
+
+    function test_setGovernancePeriods_revertsOutOfBounds() public {
+        vm.startPrank(admin);
+        vm.expectRevert("DAO: bad voting period");
+        dao.setGovernancePeriods(10, 2 minutes);
+        vm.expectRevert("DAO: bad timelock");
+        dao.setGovernancePeriods(5 minutes, 8 days);
+        vm.stopPrank();
+    }
+
+    function test_shortPeriods_fullLifecycleInMinutes() public {
+        vm.prank(admin);
+        dao.setGovernancePeriods(5 minutes, 2 minutes);
+
+        uint256 cid = _createCampaignETH();
+        uint256 pid = _donateAndCreateProposal(cid, 1 ether);
+        IGovernanceDAO.Proposal memory p = dao.getProposal(pid);
+        assertEq(p.endTime, block.timestamp + 5 minutes);
+
+        vm.prank(donor1);
+        dao.castVote(pid, IGovernanceDAO.VoteChoice.For);
+
+        vm.warp(block.timestamp + 5 minutes + 1);
+        dao.queueProposal(pid);
+        p = dao.getProposal(pid);
+        assertEq(p.executeAfter, block.timestamp + 2 minutes);
+
+        vm.warp(block.timestamp + 2 minutes);
+        dao.executeProposal(pid);
+        assertEq(uint8(dao.getProposal(pid).state), uint8(IGovernanceDAO.ProposalState.Executed));
     }
 }

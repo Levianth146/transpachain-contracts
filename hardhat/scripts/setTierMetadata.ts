@@ -50,7 +50,7 @@ const TIER_META = [
     imageFile: "tier-bronze.svg",
     name: "TranspaChain Impact — Bronze",
     description:
-      "Retro synthwave bronze donor badge. Earned by supporting a TranspaChain campaign on Sepolia.",
+      "Retro synthwave bronze donor badge. Earned by supporting a TranspaChain campaign on Avalanche.",
     tierValue: "Bronze",
   },
   {
@@ -59,7 +59,7 @@ const TIER_META = [
     imageFile: "tier-silver.svg",
     name: "TranspaChain Impact — Silver",
     description:
-      "Retro synthwave silver donor badge. Earned for meaningful contributions on Sepolia.",
+      "Retro synthwave silver donor badge. Earned for meaningful contributions on Avalanche.",
     tierValue: "Silver",
   },
   {
@@ -68,7 +68,7 @@ const TIER_META = [
     imageFile: "tier-gold.svg",
     name: "TranspaChain Impact — Gold",
     description:
-      "Retro synthwave gold donor badge. Top-tier impact recognition on Sepolia.",
+      "Retro synthwave gold donor badge. Top-tier impact recognition on Avalanche.",
     tierValue: "Gold",
   },
 ] as const;
@@ -148,7 +148,7 @@ async function pinTierBundle(
     attributes: [
       { trait_type: "Tier", value: spec.tierValue },
       { trait_type: "Style", value: "Retro Synthwave" },
-      { trait_type: "Network", value: "Sepolia" },
+      { trait_type: "Network", value: "Avalanche Fuji" },
     ],
   };
 
@@ -212,6 +212,7 @@ async function main() {
   const skipPin = process.argv.includes("--skip-pin");
   const refreshTokens = process.argv.includes("--refresh-tokens");
   const rpc =
+    process.env.FUJI_RPC_URL ||
     process.env.SEPOLIA_RPC_URL ||
     process.env.ALCHEMY_SEPOLIA_URL;
   const pk = process.env.PRIVATE_KEY || process.env.DEPLOYER_PRIVATE_KEY;
@@ -219,7 +220,7 @@ async function main() {
     process.env.IMPACT_NFT_ADDRESS || "0xD651d3531a44ee7941bFE257c79F41d274E180A6";
 
   if (!rpc || !pk) {
-    throw new Error("Set SEPOLIA_RPC_URL (or ALCHEMY_SEPOLIA_URL) and PRIVATE_KEY or DEPLOYER_PRIVATE_KEY");
+    throw new Error("Set FUJI_RPC_URL and DEPLOYER_PRIVATE_KEY");
   }
 
   const metaDir = path.join(__dirname, "../../metadata");
@@ -274,7 +275,7 @@ async function main() {
   console.log("  Silver:", cids.Silver);
   console.log("  Gold:", cids.Gold);
   console.log("\nMetaMask: open NFT → ⋯ → Refresh metadata");
-  console.log("Etherscan (ImpactNFT): https://sepolia.etherscan.io/token/" + nftAddress);
+  console.log("Snowtrace (ImpactNFT): https://testnet.snowtrace.io/token/" + nftAddress);
   console.log("Bronze metadata JSON: " + `${GATEWAY}/${cids.Bronze}`);
   console.log("Silver metadata JSON: " + `${GATEWAY}/${cids.Silver}`);
   console.log("Gold metadata JSON: " + `${GATEWAY}/${cids.Gold}`);

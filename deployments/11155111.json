@@ -1,0 +1,22 @@
+{
+  "chainId": 11155111,
+  "network": "ethereum-sepolia",
+  "explorer": "https://sepolia.etherscan.io",
+  "status": "legacy",
+  "usdc": {
+    "note": "Legacy Sepolia USDC used by v3; keep for historical reference only"
+  },
+  "deployments": {
+    "v3": {
+      "version": "3",
+      "deployBlock": 11146320,
+      "contracts": {
+        "CharityCore": "0xCE017838BfE2785CB2458bb205770663bEB9b0B8",
+        "DonationVault": "0xEb421D07E885EeB2B8E9ea408FF284013F872Db1",
+        "GovernanceDAO": "0xd655d85ddACc386901487CE8E1ec45BD4F872A19",
+        "ImpactNFT": "0xF2556FcccaE36A6d8Da0C75a863CA7368FC6761a"
+      },
+      "note": "Legacy only. Free PublicNode RPC is pruned (eth_getLogs code 4444) — Sepolia indexer cannot be rebuilt. Not a Fuji blocker."
+    }
+  }
+}
